@@ -1,10 +1,6 @@
--- LuaUIX_PlusPlus.lua
--- Combined-inspired UI lib (Rayfield + Orion + Kavo + Luna + Ash)
--- Supports inline dropdown expansion (preferred) and FloatGui fallback when needed.
--- Usage:
--- local LuaUIX = loadstring(game:HttpGet("URL"))()
--- local Window = LuaUIX:CreateWindow({Title="Demo"})
--- local Tab = Window:CreateTab("Main"); Tab:CreateButton("Hello", callback)
+-- LuaUIX_Fixed.lua
+-- Rewritten, double-checked UI lib: tabs, scrolling, real widgets, inline+float dropdown fallback.
+-- Usage: local LuaUIX = loadstring(game:HttpGet("URL"))(); local W = LuaUIX:CreateWindow{Title="Demo"}; local t = W:CreateTab("Main")
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
@@ -13,16 +9,16 @@ LuaUIX.__index = LuaUIX
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Filesystem
+-- Filesystem guards
 local canFile = type(isfile) == "function" and type(writefile) == "function" and type(readfile) == "function"
-local SAVE_FILE = "LuaUIX_PlusPlus_Settings.json"
+local SAVE_FILE = "LuaUIX_Settings.json"
 
--- GUIs
+-- ScreenGuis
 local function makeScreenGui(name)
     local sg = Instance.new("ScreenGui")
     sg.Name = name
@@ -41,14 +37,11 @@ local FloatGui = makeScreenGui("LuaUIX_Float")
 local NotifGui = makeScreenGui("LuaUIX_Notifs")
 
 -- Utilities
-local function safeTween(inst, info, props)
-    pcall(function() TweenService:Create(inst, info, props):Play() end)
-end
-local function applyUICorner(obj, radius) local c = Instance.new("UICorner"); c.CornerRadius = radius or UDim.new(0,6); c.Parent = obj; return c end
-local function applyStroke(obj, thickness, color) local s=Instance.new("UIStroke"); s.Thickness=thickness or 1; s.Color=color or Color3.new(0,0,0); s.Parent=obj; return s end
+local function safeTween(inst, info, props) pcall(function() TweenService:Create(inst, info, props):Play() end) end
+local function applyUICorner(obj, r) local c = Instance.new("UICorner"); c.CornerRadius = r or UDim.new(0,6); c.Parent = obj; return c end
 local function clamp(v,a,b) return math.max(a, math.min(b, v)) end
 
--- Persistence store
+-- Persistence
 local settingsStore = {}
 local function loadSettings()
     if not canFile then return end
@@ -74,7 +67,7 @@ do
         if running then return end
         running = true
         while #queue > 0 do
-            local n = table.remove(queue,1)
+            local n = table.remove(queue, 1)
             local frame = Instance.new("Frame")
             frame.Size = UDim2.new(0, 320, 0, 72)
             frame.Position = UDim2.new(1, 340, 0, 18)
@@ -108,7 +101,7 @@ do
             msg.TextWrapped = true
             msg.Parent = frame
 
-            if n.type == "success" then title.TextColor3 = Color3.fromRGB(120, 200, 120)
+            if n.type == "success" then title.TextColor3 = Color3.fromRGB(120,200,120)
             elseif n.type == "warning" then title.TextColor3 = Color3.fromRGB(235,200,80)
             elseif n.type == "error" then title.TextColor3 = Color3.fromRGB(220,100,100) end
 
@@ -127,14 +120,14 @@ do
     end
 end
 
--- Tooltip helper (uses FloatGui)
+-- Tooltip helper (FloatGui)
 function LuaUIX.AddTooltip(guiObj, text)
     if not guiObj or not guiObj:IsA("GuiObject") then return end
     guiObj.MouseEnter:Connect(function()
         local tip = Instance.new("TextLabel")
         tip.Size = UDim2.new(0, 180, 0, 36)
-        local absPos = guiObj.AbsolutePosition
-        tip.Position = UDim2.new(0, absPos.X, 0, absPos.Y + guiObj.AbsoluteSize.Y + 6)
+        local abs = guiObj.AbsolutePosition
+        tip.Position = UDim2.new(0, abs.X, 0, abs.Y + guiObj.AbsoluteSize.Y + 6)
         tip.BackgroundColor3 = Color3.fromRGB(45,45,45)
         tip.TextColor3 = Color3.fromRGB(230,230,230)
         tip.Text = text
@@ -144,56 +137,95 @@ function LuaUIX.AddTooltip(guiObj, text)
         tip.Parent = FloatGui
         applyUICorner(tip, UDim.new(0,6))
         tip.ZIndex = 300
-        local leaveConn; leaveConn = guiObj.MouseLeave:Connect(function() tip:Destroy(); leaveConn:Disconnect() end)
+        local conn; conn = guiObj.MouseLeave:Connect(function() tip:Destroy(); conn:Disconnect() end)
     end)
 end
 
--- Core: CreateWindow
+-- Helper: decide float fallback
+local function useFloatFallback(containerFrame, neededHeight)
+    if containerFrame.ClipsDescendants then return true end
+    local absPos = containerFrame.AbsolutePosition
+    local absSize = containerFrame.AbsoluteSize
+    local viewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800,600)
+    local below = viewportSize.Y - (absPos.Y + absSize.Y)
+    if below < neededHeight then return true end
+    return false
+end
+
+-- CreateWindow: returns window object with CreateTab
 function LuaUIX:CreateWindow(opts)
     opts = opts or {}
     local title = opts.Title or "LuaUIX"
-    local size = opts.Size or UDim2.new(0, 560, 0, 420)
-    local win = {}
-    win.__index = win
+    local size = opts.Size or UDim2.new(0, 600, 0, 420)
 
-    -- window
+    local window = {}
+    window.__index = window
+
+    -- root frame
     local main = Instance.new("Frame")
     main.Name = "LuaUIX_Window"
     main.Size = size
     main.Position = UDim2.new(0.5, -size.X.Offset/2, 0.5, -size.Y.Offset/2)
-    main.AnchorPoint = Vector2.new(0.5, 0.5)
+    main.AnchorPoint = Vector2.new(0.5,0.5)
     main.BackgroundColor3 = Color3.fromRGB(30,30,30)
     main.Parent = RootGui
     applyUICorner(main, UDim.new(0,10))
-    main.ClipsDescendants = false
     main.ZIndex = 100
+    main.ClipsDescendants = false
 
-    -- topbar
-    local top = Instance.new("Frame"); top.Size = UDim2.new(1,0,0,34); top.BackgroundTransparency = 1; top.Parent = main
-    local titleLbl = Instance.new("TextLabel"); titleLbl.Size = UDim2.new(0.8,0,1,0); titleLbl.Position = UDim2.new(0,14,0,0); titleLbl.BackgroundTransparency=1
-    titleLbl.Text = title; titleLbl.Font = Enum.Font.GothamBold; titleLbl.TextSize = 16; titleLbl.TextColor3 = Color3.fromRGB(240,240,240); titleLbl.Parent = top
+    -- top bar
+    local top = Instance.new("Frame")
+    top.Size = UDim2.new(1,0,0,36)
+    top.Position = UDim2.new(0,0,0,0)
+    top.BackgroundTransparency = 1
+    top.Parent = main
 
-    -- close
-    local close = Instance.new("TextButton"); close.Size = UDim2.new(0, 28, 0, 24); close.Position = UDim2.new(1, -36, 0, 5)
-    close.Text = "X"; close.Font = Enum.Font.GothamBold; close.TextSize = 14; close.Parent = top
-    close.BackgroundColor3 = Color3.fromRGB(50,50,50); close.TextColor3 = Color3.fromRGB(220,120,120); applyUICorner(close, UDim.new(1,0))
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Position = UDim2.new(0, 16, 0, 6)
+    titleLabel.Size = UDim2.new(0.6, 0, 0, 24)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 16
+    titleLabel.TextColor3 = Color3.fromRGB(235,235,235)
+    titleLabel.Text = title
+    titleLabel.Parent = top
+
+    -- close btn
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.new(0,28,0,24)
+    close.Position = UDim2.new(1, -36, 0, 6)
+    close.Text = "X"
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 14
+    close.Parent = top
+    close.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    close.TextColor3 = Color3.fromRGB(220,120,120)
+    applyUICorner(close, UDim.new(1,0))
     close.MouseEnter:Connect(function() safeTween(close, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(70,70,70)}) end)
     close.MouseLeave:Connect(function() safeTween(close, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(50,50,50)}) end)
     close.MouseButton1Click:Connect(function() pcall(function() main:Destroy() end) end)
 
-    -- left tabs column
-    local tabCol = Instance.new("Frame"); tabCol.Size = UDim2.new(0, 130, 1, -44); tabCol.Position = UDim2.new(0, 10, 0, 40); tabCol.BackgroundTransparency = 1; tabCol.Parent = main
-    local tabList = Instance.new("UIListLayout"); tabList.Parent = tabCol; tabList.Padding = UDim.new(0,8); tabList.SortOrder = Enum.SortOrder.LayoutOrder
+    -- left tab column
+    local tabCol = Instance.new("Frame")
+    tabCol.Size = UDim2.new(0,140,1,-56)
+    tabCol.Position = UDim2.new(0,12,0,44)
+    tabCol.BackgroundTransparency = 1
+    tabCol.Parent = main
 
-    -- right content area
-    local contentArea = Instance.new("Frame"); contentArea.Size = UDim2.new(1, -156, 1, -44); contentArea.Position = UDim2.new(0,146,0,40); contentArea.BackgroundTransparency = 1; contentArea.Parent = main
+    local tabList = Instance.new("UIListLayout")
+    tabList.Parent = tabCol
+    tabList.Padding = UDim.new(0,8)
+    tabList.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- content area (right)
+    local contentArea = Instance.new("Frame")
+    contentArea.Size = UDim2.new(1, -172, 1, -56)
+    contentArea.Position = UDim2.new(0,164,0,44)
+    contentArea.BackgroundTransparency = 1
+    contentArea.Parent = main
     contentArea.ClipsDescendants = false
 
-    -- stores
-    local tabs = {}
-    local activeTab = nil
-
-    -- drag
+    -- drag logic
     do
         local dragging, dragStart, startPos, dragInput
         local function update(input)
@@ -205,63 +237,67 @@ function LuaUIX:CreateWindow(opts)
                 dragging = true
                 dragStart = input.Position
                 startPos = main.Position
-                local conn; conn = input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then dragging=false; conn:Disconnect() end
-                end)
+                local conn; conn = input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging=false; conn:Disconnect() end end)
             end
         end)
-        top.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
-        end)
-        UserInputService.InputChanged:Connect(function(input) if input==dragInput and dragging then update(input) end end)
+        top.InputChanged:Connect(function(input) if input.UserInputType==Enum.UserInputType.MouseMovement then dragInput = input end end)
+        UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
     end
 
+    -- internal storage
+    local tabs = {}
+    local activeTab = nil
+
     -- CreateTab
-    function win:CreateTab(name)
+    function window:CreateTab(name)
+        local tabObj = {}
+        tabObj.__index = tabObj
+
+        -- layout order management per tab (ensures inline options get placed after header)
+        local nextOrder = 1
+
         -- tab button
         local btn = Instance.new("TextButton")
-        btn.AutoButtonColor = false
-        btn.Size = UDim2.new(1, 0, 0, 28)
+        btn.Size = UDim2.new(1,0,0,28)
         btn.BackgroundTransparency = 1
         btn.Font = Enum.Font.Gotham
         btn.TextSize = 14
         btn.Text = name
-        btn.TextColor3 = Color3.fromRGB(220,220,220)
         btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.TextColor3 = Color3.fromRGB(220,220,220)
         btn.Parent = tabCol
-        applyUICorner(btn, UDim.new(0,6))
         btn.LayoutOrder = #tabs + 1
+        applyUICorner(btn, UDim.new(0,6))
 
-        -- content scrolling frame for this tab
+        -- scroll content for this tab
         local scroll = Instance.new("ScrollingFrame")
         scroll.Size = UDim2.new(1, 0, 1, 0)
-        scroll.Position = UDim2.new(0,0,0,0)
+        scroll.Position = UDim2.new(0, 0, 0, 0)
         scroll.BackgroundTransparency = 1
-        scroll.ScrollBarThickness = 6
         scroll.Parent = contentArea
         scroll.Visible = false
         scroll.CanvasSize = UDim2.new(0,0,0,0)
         scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.ScrollBarThickness = 6
         scroll.ClipsDescendants = false
 
         local layout = Instance.new("UIListLayout")
+        layout.Parent = scroll
         layout.Padding = UDim.new(0,8)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Parent = scroll
 
         local padding = Instance.new("UIPadding")
-        padding.PaddingTop = UDim.new(0,6); padding.PaddingBottom = UDim.new(0,8); padding.PaddingLeft = UDim.new(0,6); padding.PaddingRight = UDim.new(0,6)
+        padding.PaddingTop = UDim.new(0,8)
+        padding.PaddingLeft = UDim.new(0,8)
+        padding.PaddingRight = UDim.new(0,8)
         padding.Parent = scroll
 
-        local tabObj = {}
-        tabObj.__index = tabObj
-        tabObj._btn = btn
-        tabObj._scroll = scroll
-        tabObj._name = name
-
-        -- switch tab implementation
+        -- tab switching
         btn.MouseButton1Click:Connect(function()
-            if activeTab and activeTab._scroll then activeTab._scroll.Visible = false; activeTab._btn.TextColor3 = Color3.fromRGB(200,200,200) end
+            if activeTab and activeTab._scroll then
+                activeTab._scroll.Visible = false
+                activeTab._btn.TextColor3 = Color3.fromRGB(200,200,200)
+            end
             scroll.Visible = true
             btn.TextColor3 = Color3.fromRGB(255,255,255)
             activeTab = tabObj
@@ -272,70 +308,63 @@ function LuaUIX:CreateWindow(opts)
             btn:MouseButton1Click()
         end
 
-        -- utility to detect if we should float options (clips descendant or not enough space)
-        local function useFloatFallback(targetFrame, neededHeight)
-            -- if targetFrame clips descendants or there isn't enough below space to show neededHeight within window, float
-            if targetFrame.ClipsDescendants then return true end
-            local absPos = targetFrame.AbsolutePosition
-            local absSize = targetFrame.AbsoluteSize
-            local screenY = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 720
-            local below = screenY - (absPos.Y + absSize.Y)
-            if below < neededHeight then
-                return true
-            end
-            return false
+        -- helper to reserve layout order numbers
+        local function reserveOrders(n)
+            local start = nextOrder
+            nextOrder = nextOrder + n
+            return start
         end
 
-        -- -------- Widgets --------
+        -- WIDGETS: All widgets parent to scroll and use LayoutOrder values to keep order
         function tabObj:CreateLabel(text)
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1,0,0,20)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = text
-            lbl.Font = Enum.Font.Gotham
-            lbl.TextSize = 14
-            lbl.TextColor3 = Color3.fromRGB(220,220,220)
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = scroll
-            lbl.LayoutOrder = 1
-            return lbl
+            local o = Instance.new("TextLabel")
+            o.Size = UDim2.new(1,0,0,20)
+            o.BackgroundTransparency = 1
+            o.Text = text or ""
+            o.Font = Enum.Font.Gotham
+            o.TextSize = 14
+            o.TextColor3 = Color3.fromRGB(220,220,220)
+            o.TextXAlignment = Enum.TextXAlignment.Left
+            o.Parent = scroll
+            o.LayoutOrder = reserveOrders(1)
+            return o
         end
 
         function tabObj:CreateButton(text, callback)
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1,0,0,36)
-            btn.BackgroundColor3 = Color3.fromRGB(55,55,55)
-            btn.Text = text or "Button"
-            btn.Font = Enum.Font.GothamBold
-            btn.TextSize = 14
-            btn.TextColor3 = Color3.fromRGB(245,245,245)
-            btn.Parent = scroll
-            applyUICorner(btn, UDim.new(0,6))
-            btn.LayoutOrder = 1
-            btn.MouseEnter:Connect(function() safeTween(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(75,75,75)}) end)
-            btn.MouseLeave:Connect(function() safeTween(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(55,55,55)}) end)
-            btn.MouseButton1Click:Connect(function() pcall(callback) end)
-            return btn
+            local o = Instance.new("TextButton")
+            o.Size = UDim2.new(1,0,0,36)
+            o.BackgroundColor3 = Color3.fromRGB(55,55,55)
+            o.Font = Enum.Font.GothamBold
+            o.TextSize = 14
+            o.Text = text or "Button"
+            o.TextColor3 = Color3.fromRGB(245,245,245)
+            applyUICorner(o, UDim.new(0,6))
+            o.Parent = scroll
+            o.LayoutOrder = reserveOrders(1)
+            o.MouseEnter:Connect(function() safeTween(o, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(75,75,75)}) end)
+            o.MouseLeave:Connect(function() safeTween(o, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(55,55,55)}) end)
+            o.MouseButton1Click:Connect(function() pcall(callback) end)
+            return o
         end
 
         function tabObj:CreateToggle(text, default, callback)
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1,0,0,36)
-            frame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            frame.Parent = scroll
-            applyUICorner(frame, UDim.new(0,6))
-            frame.LayoutOrder = 1
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1,0,0,36)
+            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            applyUICorner(container, UDim.new(0,6))
+            container.Parent = scroll
+            container.LayoutOrder = reserveOrders(1)
 
-            local label = Instance.new("TextLabel")
-            label.BackgroundTransparency = 1
-            label.Size = UDim2.new(0.7,0,1,0)
-            label.Position = UDim2.new(0,10,0,0)
-            label.Text = text or "Toggle"
-            label.Font = Enum.Font.Gotham
-            label.TextSize = 14
-            label.TextColor3 = Color3.fromRGB(230,230,230)
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = frame
+            local lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Size = UDim2.new(0.7,0,1,0)
+            lbl.Position = UDim2.new(0,10,0,0)
+            lbl.Text = text or "Toggle"
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 14
+            lbl.TextColor3 = Color3.fromRGB(230,230,230)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = container
 
             local sw = Instance.new("TextButton")
             sw.Size = UDim2.new(0.25, -14, 0, 22)
@@ -346,7 +375,7 @@ function LuaUIX:CreateWindow(opts)
             sw.Text = default and "ON" or "OFF"
             sw.TextColor3 = Color3.fromRGB(240,240,240)
             applyUICorner(sw, UDim.new(0,6))
-            sw.Parent = frame
+            sw.Parent = container
 
             local state = default or false
             sw.MouseButton1Click:Connect(function()
@@ -357,9 +386,9 @@ function LuaUIX:CreateWindow(opts)
             end)
 
             return {
-                Set = function(s) state=s; sw.Text = s and "ON" or "OFF"; sw.BackgroundColor3 = s and Color3.fromRGB(90,160,90) or Color3.fromRGB(80,80,80) end,
+                Set = function(s) state = s; sw.Text = s and "ON" or "OFF"; sw.BackgroundColor3 = s and Color3.fromRGB(90,160,90) or Color3.fromRGB(80,80,80) end,
                 Get = function() return state end,
-                Instance = frame
+                Instance = container
             }
         end
 
@@ -368,7 +397,7 @@ function LuaUIX:CreateWindow(opts)
             container.Size = UDim2.new(1,0,0,54)
             container.BackgroundTransparency = 1
             container.Parent = scroll
-            container.LayoutOrder = 1
+            container.LayoutOrder = reserveOrders(1)
 
             local label = Instance.new("TextLabel")
             label.BackgroundTransparency = 1
@@ -392,7 +421,7 @@ function LuaUIX:CreateWindow(opts)
             box.Parent = container
             applyUICorner(box, UDim.new(0,6))
 
-            box.FocusLost:Connect(function(enter)
+            box.FocusLost:Connect(function()
                 local ok = true
                 if validation then
                     local s, res = pcall(function() return validation(box.Text) end)
@@ -415,23 +444,23 @@ function LuaUIX:CreateWindow(opts)
         end
 
         function tabObj:CreateKeybind(text, defaultKey, callback)
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1,0,0,36)
-            frame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            frame.Parent = scroll
-            frame.LayoutOrder = 1
-            applyUICorner(frame, UDim.new(0,6))
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1,0,0,36)
+            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            applyUICorner(container, UDim.new(0,6))
+            container.Parent = scroll
+            container.LayoutOrder = reserveOrders(1)
 
-            local label = Instance.new("TextLabel")
-            label.BackgroundTransparency = 1
-            label.Size = UDim2.new(0.6,0,1,0)
-            label.Position = UDim2.new(0,10,0,0)
-            label.Text = text or "Keybind"
-            label.Font = Enum.Font.Gotham
-            label.TextSize = 14
-            label.TextColor3 = Color3.fromRGB(230,230,230)
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = frame
+            local lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Size = UDim2.new(0.6,0,1,0)
+            lbl.Position = UDim2.new(0,10,0,0)
+            lbl.Text = text or "Keybind"
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 14
+            lbl.TextColor3 = Color3.fromRGB(230,230,230)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = container
 
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(0.35, -10, 0, 24)
@@ -441,22 +470,22 @@ function LuaUIX:CreateWindow(opts)
             btn.TextSize = 14
             btn.TextColor3 = Color3.fromRGB(240,240,240)
             applyUICorner(btn, UDim.new(0,6))
-            btn.Parent = frame
+            btn.Parent = container
 
             local current = defaultKey or Enum.KeyCode.F
             btn.Text = tostring(current):gsub("Enum.KeyCode.", "")
 
-            local listeningConn
+            local conn
             btn.MouseButton1Click:Connect(function()
                 btn.Text = "..."
                 btn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-                listeningConn = UserInputService.InputBegan:Connect(function(i)
-                    if i.UserInputType == Enum.UserInputType.Keyboard then
-                        current = i.KeyCode
+                conn = UserInputService.InputBegan:Connect(function(inp)
+                    if inp.UserInputType == Enum.UserInputType.Keyboard then
+                        current = inp.KeyCode
                         btn.Text = tostring(current):gsub("Enum.KeyCode.", "")
                         btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
                         pcall(callback, current)
-                        listeningConn:Disconnect()
+                        conn:Disconnect()
                     end
                 end)
             end)
@@ -464,7 +493,7 @@ function LuaUIX:CreateWindow(opts)
             return {
                 Set = function(k) current = k; btn.Text = tostring(k):gsub("Enum.KeyCode.", "") end,
                 Get = function() return current end,
-                Instance = frame
+                Instance = container
             }
         end
 
@@ -474,7 +503,7 @@ function LuaUIX:CreateWindow(opts)
             container.Size = UDim2.new(1,0,0,48)
             container.BackgroundTransparency = 1
             container.Parent = scroll
-            container.LayoutOrder = 1
+            container.LayoutOrder = reserveOrders(1)
 
             local label = Instance.new("TextLabel")
             label.Size = UDim2.new(0.6,0,0,18)
@@ -501,25 +530,21 @@ function LuaUIX:CreateWindow(opts)
             barBg.Size = UDim2.new(1,0,0,12)
             barBg.Position = UDim2.new(0,0,0,26)
             barBg.BackgroundColor3 = Color3.fromRGB(55,55,55)
-            barBg.Parent = container
             applyUICorner(barBg, UDim.new(0,6))
+            barBg.Parent = container
 
             local barFill = Instance.new("Frame")
-            barFill.Size = UDim2.new((default - min)/(max-min),0,1,0)
+            barFill.Size = UDim2.new((default-min)/(max-min),0,1,0)
             barFill.BackgroundColor3 = Color3.fromRGB(100,100,230)
             barFill.Parent = barBg
             applyUICorner(barFill, UDim.new(0,6))
 
             local dragging = false
             barBg.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    dragging = true
-                end
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
             end)
             barBg.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    dragging = false
-                end
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
             end)
             UserInputService.InputChanged:Connect(function(input)
                 if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -539,13 +564,15 @@ function LuaUIX:CreateWindow(opts)
         end
 
         function tabObj:CreateDropdown(text, items, defaultIndex, callback)
+            items = items or {}
             defaultIndex = defaultIndex or 1
-            local container = Instance.new("Frame")
-            container.Size = UDim2.new(1,0,0,36)
-            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            container.Parent = scroll
-            applyUICorner(container, UDim.new(0,6))
-            container.LayoutOrder = 1
+            local headerOrder = reserveOrders(2) -- reserve two orders: header and inline options
+            local header = Instance.new("Frame")
+            header.Size = UDim2.new(1,0,0,36)
+            header.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            applyUICorner(header, UDim.new(0,6))
+            header.Parent = scroll
+            header.LayoutOrder = headerOrder
 
             local label = Instance.new("TextLabel")
             label.Size = UDim2.new(1,-30,1,0)
@@ -556,7 +583,7 @@ function LuaUIX:CreateWindow(opts)
             label.TextSize = 14
             label.TextColor3 = Color3.fromRGB(220,220,220)
             label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = container
+            label.Parent = header
 
             local arrow = Instance.new("TextLabel")
             arrow.Size = UDim2.new(0,18,0,18)
@@ -566,19 +593,28 @@ function LuaUIX:CreateWindow(opts)
             arrow.Font = Enum.Font.Gotham
             arrow.TextSize = 12
             arrow.TextColor3 = Color3.fromRGB(200,200,200)
-            arrow.Parent = container
+            arrow.Parent = header
 
-            -- inline options frame
+            -- click catcher (transparent button)
+            local clicker = Instance.new("TextButton")
+            clicker.Size = UDim2.new(1,0,1,0)
+            clicker.BackgroundTransparency = 1
+            clicker.Text = ""
+            clicker.Parent = header
+
+            -- inline options (sibling in scroll so layout works)
             local optionsFrame = Instance.new("Frame")
             optionsFrame.Size = UDim2.new(1,0,0,0)
-            optionsFrame.Position = UDim2.new(0, 0, 1, 6)
             optionsFrame.BackgroundColor3 = Color3.fromRGB(42,42,42)
             optionsFrame.ClipsDescendants = true
-            optionsFrame.Parent = container
+            optionsFrame.Parent = scroll
             applyUICorner(optionsFrame, UDim.new(0,6))
-            optionsFrame.LayoutOrder = 2
+            optionsFrame.LayoutOrder = headerOrder + 1
 
-            local optionsLayout = Instance.new("UIListLayout"); optionsLayout.Parent = optionsFrame; optionsLayout.Padding = UDim.new(0,4)
+            local optionsLayout = Instance.new("UIListLayout")
+            optionsLayout.Parent = optionsFrame
+            optionsLayout.Padding = UDim.new(0,4)
+            optionsFrame.Visible = false
 
             local current = defaultIndex
             local open = false
@@ -588,14 +624,16 @@ function LuaUIX:CreateWindow(opts)
                 pcall(callback, items[current], current)
             end
 
-            local function closeOptions()
-                open = false
-                safeTween(arrow, TweenInfo.new(0.12), {Rotation = 0})
-                safeTween(optionsFrame, TweenInfo.new(0.15), {Size = UDim2.new(1,0,0,0)})
-                task.delay(0.16, function() optionsFrame.Visible = false end)
+            local function closeInline()
+                if open then
+                    open = false
+                    safeTween(arrow, TweenInfo.new(0.12), {Rotation = 0})
+                    safeTween(optionsFrame, TweenInfo.new(0.15), {Size = UDim2.new(1,0,0,0)})
+                    task.delay(0.16, function() optionsFrame.Visible = false end)
+                end
             end
 
-            local function openOptionsInline()
+            local function openInline()
                 optionsFrame.Visible = true
                 local needed = #items * 30 + 8
                 optionsFrame.Size = UDim2.new(1,0,0,needed)
@@ -603,17 +641,16 @@ function LuaUIX:CreateWindow(opts)
                 open = true
             end
 
-            local function openOptionsFloat()
-                -- create floating frame in FloatGui
+            local function openFloat()
                 local f = Instance.new("Frame")
                 f.BackgroundColor3 = Color3.fromRGB(42,42,42)
-                f.Size = UDim2.new(0, 200, 0, #items*30+10)
-                local abs = container.AbsolutePosition
-                f.Position = UDim2.new(0, abs.X, 0, abs.Y + container.AbsoluteSize.Y + 6)
+                f.Size = UDim2.new(0, 220, 0, #items*30 + 10)
+                local abs = header.AbsolutePosition
+                f.Position = UDim2.new(0, abs.X, 0, abs.Y + header.AbsoluteSize.Y + 6)
                 f.Parent = FloatGui
-                f.ZIndex = 400
                 applyUICorner(f, UDim.new(0,6))
-                local flayout = Instance.new("UIListLayout"); flayout.Parent=f; flayout.Padding=UDim.new(0,4)
+                f.ZIndex = 400
+
                 for i,it in ipairs(items) do
                     local b = Instance.new("TextButton")
                     b.Size = UDim2.new(1, -14, 0, 26)
@@ -632,72 +669,74 @@ function LuaUIX:CreateWindow(opts)
                         f:Destroy()
                     end)
                 end
-                -- close when clicking outside
-                local conn; conn = UserInputService.InputBegan:Connect(function(inp)
+
+                local conn
+                conn = UserInputService.InputBegan:Connect(function(inp)
                     if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-                        local mousePos = UserInputService:GetMouseLocation()
-                        local px,py = mousePos.X, mousePos.Y
-                        local fPos = f.AbsolutePosition; local fSize = f.AbsoluteSize
-                        if not (px >= fPos.X and px <= fPos.X+fSize.X and py >= fPos.Y and py <= fPos.Y+fSize.Y) then
-                            f:Destroy(); conn:Disconnect()
+                        local mx,my = UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y
+                        local pos = f.AbsolutePosition; local size = f.AbsoluteSize
+                        if not (mx >= pos.X and mx <= pos.X+size.X and my >= pos.Y and my <= pos.Y+size.Y) then
+                            f:Destroy()
+                            conn:Disconnect()
                         end
                     end
                 end)
             end
 
-            container.MouseButton1Click:Connect(function()
-                -- decide inline or float
+            clicker.MouseButton1Click:Connect(function()
                 local needed = #items * 30 + 8
-                if useFloatFallback(container, needed) then
-                    openOptionsFloat()
+                if useFloatFallback(header, needed) then
+                    openFloat()
                 else
-                    if open then closeOptions() else openOptionsInline() end
+                    if open then closeInline() else openInline() end
                 end
             end)
 
-            -- populate inline options (hidden)
+            -- populate inline options
             for i,it in ipairs(items) do
-                local o = Instance.new("TextButton")
-                o.Size = UDim2.new(1, -14, 0, 26)
-                o.Position = UDim2.new(0, 7, 0, (i-1)*30 + 6)
-                o.BackgroundColor3 = Color3.fromRGB(50,50,50)
-                o.Text = it
-                o.Font = Enum.Font.Gotham
-                o.TextSize = 14
-                o.TextColor3 = Color3.fromRGB(230,230,230)
-                applyUICorner(o, UDim.new(0,4))
-                o.Parent = optionsFrame
-                o.ZIndex = 120
-                o.MouseButton1Click:Connect(function()
+                local opt = Instance.new("TextButton")
+                opt.Size = UDim2.new(1, -14, 0, 26)
+                opt.Position = UDim2.new(0, 7, 0, (i-1)*30 + 6)
+                opt.BackgroundColor3 = Color3.fromRGB(50,50,50)
+                opt.Text = it
+                opt.Font = Enum.Font.Gotham
+                opt.TextSize = 14
+                opt.TextColor3 = Color3.fromRGB(230,230,230)
+                applyUICorner(opt, UDim.new(0,4))
+                opt.Parent = optionsFrame
+                opt.ZIndex = 120
+                opt.MouseButton1Click:Connect(function()
                     current = i
                     updateLabel()
-                    closeOptions()
+                    closeInline()
                 end)
             end
 
             updateLabel()
             return {
-                Set = function(idx) if idx>=1 and idx<=#items then current = idx; updateLabel() end end,
+                Set = function(idx) if idx>=1 and idx<=#items then current=idx; updateLabel() end end,
                 Get = function() return current, items[current] end,
-                Instance = container
+                Instance = header
             }
         end
 
-        -- Return tab object
-        tabs[#tabs+1] = tabObj
+        -- done building tab
+        tabObj._btn = btn
+        tabObj._scroll = scroll
+        tabObj._name = name
+
+        tabs[#tabs + 1] = tabObj
         return setmetatable(tabObj, tabObj)
     end
 
-    -- Expose window methods
-    function win:Toggle() main.Visible = not main.Visible end
-    function win:Destroy() pcall(function() main:Destroy() end) end
+    function window:Toggle() main.Visible = not main.Visible end
+    function window:Destroy() pcall(function() main:Destroy() end) end
 
-    return setmetatable(win, win)
+    return setmetatable(window, window)
 end
 
 -- Expose Save/Load/Notify
 function LuaUIX.Save() saveSettings() end
 function LuaUIX.Load() loadSettings() end
 
--- Return module
 return LuaUIX
