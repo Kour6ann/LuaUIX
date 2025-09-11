@@ -1,589 +1,660 @@
--- LuaUIX_Enhanced.lua
--- Single-file enhancement pack for LuaUIX (polish + widgets + persistence + notifications + tooltips + mobile)
--- Usage: local LuaUIX = require(path_to_this_file); LuaUIX:Init() or use Create* functions.
+-- LuaUIX_Refined.lua
+-- Polished, Orion/Rayfield-like single-file UI library (client-side)
+-- Usage: local LuaUIX = loadstring(game:HttpGet("URL"))(); local w = LuaUIX:CreateWindow{...}
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
 
 -- Services
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
+
 local LocalPlayer = Players.LocalPlayer
 
--- Save file (exploit-safe guards)
+-- Filesystem guards
+local canFile = type(isfile) == "function" and type(writefile) == "function" and type(readfile) == "function"
 local SAVE_FILE = "LuaUIX_Settings.json"
-local canFile = (type(isfile) == "function") and (type(writefile) == "function") and (type(readfile) == "function")
 
--- Internal state
-local settingsData = {}
-local widgetRegistry = {
-    toggles = {},
-    sliders = {},
-    dropdowns = {},
-    textboxes = {},
-    keybinds = {}
-}
+-- Top-level ScreenGuis
+local function makeScreenGui(name)
+    local sg = Instance.new("ScreenGui")
+    sg.Name = name
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+        sg.Parent = LocalPlayer.PlayerGui
+    else
+        -- fallback
+        pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    end
+    return sg
+end
 
--- Root UI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LuaUIX_Enhanced"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
+local RootGui = makeScreenGui("LuaUIX_Root")
+local NotifGui = makeScreenGui("LuaUIX_Notifs")
+local FloatGui = makeScreenGui("LuaUIX_Float") -- used for dropdowns/tooltips so they aren't clipped
 
--- Demo main frame (created on Init)
-local MainFrame, TopBar, CloseBtn
-
--- Utility helpers
+-- Utility
 local function safeTween(inst, info, props)
-    pcall(function()
-        TweenService:Create(inst, info, props):Play()
-    end)
+    pcall(function() TweenService:Create(inst, info, props):Play() end)
 end
 
-local function applyAccentColor(color3)
-    settingsData.accentColor = {color3.R, color3.G, color3.B}
-    -- In a large library you'd update relevant elements here
-end
-
--- =========================
--- Close Button + Dragging
--- =========================
-local function makeTopBarAndClose(mainFrame)
-    TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 28)
-    TopBar.BackgroundTransparency = 1
-    TopBar.Parent = mainFrame
-
-    -- Close Button
-    CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-    CloseBtn.Position = UDim2.new(1, -30, 0, 0)
-    CloseBtn.Text = "X"
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    CloseBtn.TextColor3 = Color3.fromRGB(220, 80, 80)
-    CloseBtn.Font = Enum.Font.GothamBold
-    CloseBtn.TextSize = 14
-    CloseBtn.Parent = TopBar
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = CloseBtn
-
-    CloseBtn.MouseEnter:Connect(function()
-        safeTween(CloseBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(60, 60, 60)})
-    end)
-    CloseBtn.MouseLeave:Connect(function()
-        safeTween(CloseBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(45, 45, 45)})
-    end)
-    CloseBtn.MouseButton1Click:Connect(function()
-        if ScreenGui and ScreenGui.Parent then
-            ScreenGui:Destroy()
+local function setChildrenZIndex(frame, z)
+    for _, child in ipairs(frame:GetDescendants()) do
+        if child:IsA("GuiObject") then
+            child.ZIndex = z
         end
-    end)
+    end
+end
 
-    -- Dragging
-    local draggingUI, dragStart, startPos, dragInput
-    local function update(input)
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
+local function applyUICorner(guiObj, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = radius or UDim.new(0,6)
+    c.Parent = guiObj
+    return c
+end
+
+-- Notifications
+do
+    local queue = {}
+    local running = false
+
+    local function process()
+        if running then return end
+        running = true
+        while #queue > 0 do
+            local n = table.remove(queue, 1)
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(0, 300, 0, 70)
+            frame.Position = UDim2.new(1, 320, 0, 20) -- start off-screen right
+            frame.AnchorPoint = Vector2.new(1, 0)
+            frame.BackgroundColor3 = Color3.fromRGB(36,36,36)
+            frame.Parent = NotifGui
+            applyUICorner(frame, UDim.new(0,8))
+            frame.BorderSizePixel = 0
+            frame.ZIndex = 50
+
+            local title = Instance.new("TextLabel")
+            title.Size = UDim2.new(1, -20, 0, 20)
+            title.Position = UDim2.new(0, 10, 0, 6)
+            title.BackgroundTransparency = 1
+            title.Text = n.title or "Notice"
+            title.Font = Enum.Font.GothamBold
+            title.TextSize = 14
+            title.TextColor3 = Color3.fromRGB(220,220,220)
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.Parent = frame
+            local msg = Instance.new("TextLabel")
+            msg.Size = UDim2.new(1, -20, 0, 40)
+            msg.Position = UDim2.new(0, 10, 0, 24)
+            msg.BackgroundTransparency = 1
+            msg.Text = n.msg or ""
+            msg.Font = Enum.Font.Gotham
+            msg.TextSize = 12
+            msg.TextColor3 = Color3.fromRGB(180,180,180)
+            msg.TextXAlignment = Enum.TextXAlignment.Left
+            msg.TextYAlignment = Enum.TextYAlignment.Top
+            msg.TextWrapped = true
+            msg.Parent = frame
+
+            if n.type == "success" then title.TextColor3 = Color3.fromRGB(100,200,100)
+            elseif n.type == "warning" then title.TextColor3 = Color3.fromRGB(235,200,80)
+            elseif n.type == "error" then title.TextColor3 = Color3.fromRGB(220,100,100) end
+
+            safeTween(frame, TweenInfo.new(0.28, Enum.EasingStyle.Quad), {Position = UDim2.new(1, -20, 0, 20)})
+            task.wait(n.duration or 3.5)
+            safeTween(frame, TweenInfo.new(0.22, Enum.EasingStyle.Quad), {Position = UDim2.new(1, 320, 0, 20)})
+            task.wait(0.24)
+            frame:Destroy()
+        end
+        running = false
     end
 
-    TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            draggingUI = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
+    function LuaUIX.Notify(title, msg, duration, typ)
+        table.insert(queue, {title = title, msg = msg, duration = duration, type = typ})
+        spawn(process)
+    end
+end
 
-            local connection
-            connection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    draggingUI = false
-                    connection:Disconnect()
+-- Persistence
+local settingsStore = {}
+local function saveSettings()
+    if not canFile then return end
+    pcall(function()
+        writefile(SAVE_FILE, HttpService:JSONEncode(settingsStore))
+    end)
+end
+local function loadSettings()
+    if not canFile then return end
+    pcall(function()
+        if isfile(SAVE_FILE) then
+            settingsStore = HttpService:JSONDecode(readfile(SAVE_FILE)) or {}
+        end
+    end)
+end
+loadSettings()
+
+-- Window / Tab system
+function LuaUIX:CreateWindow(opts)
+    opts = opts or {}
+    local title = opts.Title or "LuaUIX"
+    local size = opts.Size or UDim2.new(0, 520, 0, 320)
+
+    local Window = {}
+    Window.__index = Window
+
+    -- window container
+    local winFrame = Instance.new("Frame")
+    winFrame.Name = "LuaUIX_Window"
+    winFrame.Size = size
+    winFrame.Position = UDim2.new(0.5, -size.X.Offset/2, 0.5, -size.Y.Offset/2)
+    winFrame.AnchorPoint = Vector2.new(0.5,0.5)
+    winFrame.BackgroundColor3 = Color3.fromRGB(28,28,28)
+    winFrame.Parent = RootGui
+    applyUICorner(winFrame, UDim.new(0,8))
+    winFrame.BorderSizePixel = 0
+    winFrame.ClipsDescendants = false
+    winFrame.ZIndex = 5
+
+    -- top bar
+    local topbar = Instance.new("Frame")
+    topbar.Size = UDim2.new(1, 0, 0, 30)
+    topbar.Position = UDim2.new(0, 0, 0, 0)
+    topbar.BackgroundTransparency = 1
+    topbar.Parent = winFrame
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Position = UDim2.new(0, 12, 0, 4)
+    titleLbl.Size = UDim2.new(0, 300, 0, 22)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = title
+    titleLbl.TextSize = 16
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextColor3 = Color3.fromRGB(235,235,235)
+    titleLbl.Parent = topbar
+
+    -- close button
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 28, 0, 24)
+    closeBtn.Position = UDim2.new(1, -34, 0, 3)
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    closeBtn.TextColor3 = Color3.fromRGB(200,80,80)
+    closeBtn.Parent = topbar
+    applyUICorner(closeBtn, UDim.new(1,0))
+
+    closeBtn.MouseEnter:Connect(function() safeTween(closeBtn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(65,65,65)}) end)
+    closeBtn.MouseLeave:Connect(function() safeTween(closeBtn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(45,45,45)}) end)
+
+    closeBtn.MouseButton1Click:Connect(function()
+        pcall(function() winFrame:Destroy() end)
+    end)
+
+    -- dragging
+    do
+        local dragging, dragStart, startPos, dragInput
+        local function update(input)
+            local delta = input.Position - dragStart
+            winFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+
+        topbar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = winFrame.Position
+                local conn
+                conn = input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                        conn:Disconnect()
+                    end
+                end)
+            end
+        end)
+        topbar.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                update(input)
+            end
+        end)
+    end
+
+    -- content holder (vertical stack)
+    local contentHolder = Instance.new("Frame")
+    contentHolder.Size = UDim2.new(1, -24, 1, -42)
+    contentHolder.Position = UDim2.new(0, 12, 0, 36)
+    contentHolder.BackgroundTransparency = 1
+    contentHolder.Parent = winFrame
+    contentHolder.AutomaticSize = Enum.AutomaticSize.Y
+    contentHolder.ClipsDescendants = false
+
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0,8)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Parent = contentHolder
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0,6)
+    padding.PaddingBottom = UDim.new(0,6)
+    padding.PaddingLeft = UDim.new(0,6)
+    padding.PaddingRight = UDim.new(0,6)
+    padding.Parent = contentHolder
+
+    -- API: CreateTab returns an object with widget creation functions that put children into contentHolder in vertical stack
+    function Window:CreateTab(tabName)
+        local Tab = {}
+        Tab.__index = Tab
+
+        -- section header
+        local header = Instance.new("TextLabel")
+        header.Size = UDim2.new(1, 0, 0, 22)
+        header.BackgroundTransparency = 1
+        header.Text = tabName
+        header.Font = Enum.Font.GothamBold
+        header.TextSize = 14
+        header.TextColor3 = Color3.fromRGB(220,220,220)
+        header.TextXAlignment = Enum.TextXAlignment.Left
+        header.Parent = contentHolder
+        header.LayoutOrder = 0
+
+        function Tab:CreateDropdown(name, options, defaultIndex, callback)
+            defaultIndex = defaultIndex or 1
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 36)
+            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            container.Parent = contentHolder
+            applyUICorner(container, UDim.new(0,6))
+            container.LayoutOrder = 1
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, -34, 1, 0)
+            label.Position = UDim2.new(0, 10, 0, 0)
+            label.BackgroundTransparency = 1
+            label.Text = name .. ": " .. tostring(options[defaultIndex] or "")
+            label.Font = Enum.Font.Gotham
+            label.TextSize = 14
+            label.TextColor3 = Color3.fromRGB(220,220,220)
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.Parent = container
+
+            local arrow = Instance.new("TextLabel")
+            arrow.Size = UDim2.new(0, 20, 0, 20)
+            arrow.Position = UDim2.new(1, -28, 0.5, -10)
+            arrow.BackgroundTransparency = 1
+            arrow.Text = "▼"
+            arrow.Font = Enum.Font.Gotham
+            arrow.TextSize = 12
+            arrow.TextColor3 = Color3.fromRGB(200,200,200)
+            arrow.Parent = container
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 1, 0)
+            btn.BackgroundTransparency = 1
+            btn.Text = ""
+            btn.Parent = container
+
+            -- floating options frame in FloatGui so not clipped
+            local optionsFrame = Instance.new("Frame")
+            optionsFrame.Size = UDim2.new(0, 180, 0, 0)
+            optionsFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            optionsFrame.Parent = FloatGui
+            applyUICorner(optionsFrame, UDim.new(0,6))
+            optionsFrame.Visible = false
+            optionsFrame.ZIndex = 80
+
+            local layout = Instance.new("UIListLayout")
+            layout.Parent = optionsFrame
+            layout.Padding = UDim.new(0,4)
+
+            local current = defaultIndex
+
+            local function updateLabel()
+                label.Text = name .. ": " .. tostring(options[current] or "")
+                if callback then pcall(callback, options[current], current) end
+            end
+
+            local function toggle()
+                if optionsFrame.Visible then
+                    optionsFrame.Visible = false
+                    safeTween(arrow, TweenInfo.new(0.12), {Rotation = 0})
+                    safeTween(optionsFrame, TweenInfo.new(0.15), {Size = UDim2.new(0, optionsFrame.Size.X.Offset, 0, 0)})
+                else
+                    -- position below container
+                    local absPos = container.AbsolutePosition
+                    optionsFrame.Position = UDim2.new(0, absPos.X, 0, absPos.Y + container.AbsoluteSize.Y + 6)
+                    optionsFrame.Size = UDim2.new(0, 180, 0, #options * 30)
+                    optionsFrame.Visible = true
+                    safeTween(arrow, TweenInfo.new(0.12), {Rotation = 180})
+                end
+            end
+
+            btn.MouseButton1Click:Connect(toggle)
+
+            for i, opt in ipairs(options) do
+                local oBtn = Instance.new("TextButton")
+                oBtn.Size = UDim2.new(1, -14, 0, 26)
+                oBtn.Position = UDim2.new(0, 7, 0, (i-1)*30 + 6)
+                oBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+                oBtn.Text = opt
+                oBtn.Font = Enum.Font.Gotham
+                oBtn.TextSize = 14
+                oBtn.TextColor3 = Color3.fromRGB(220,220,220)
+                oBtn.Parent = optionsFrame
+                applyUICorner(oBtn, UDim.new(0,4))
+                oBtn.ZIndex = 85
+
+                oBtn.MouseButton1Click:Connect(function()
+                    current = i
+                    updateLabel()
+                    toggle()
+                end)
+            end
+
+            updateLabel()
+
+            return {
+                Set = function(idx)
+                    if idx >=1 and idx <= #options then current = idx; updateLabel() end
+                end,
+                Get = function() return current, options[current] end
+            }
+        end
+
+        function Tab:CreateTextbox(name, placeholder, callback, validation)
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 50)
+            container.BackgroundTransparency = 1
+            container.Parent = contentHolder
+            container.LayoutOrder = 1
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 0, 18)
+            label.BackgroundTransparency = 1
+            label.Text = name
+            label.Font = Enum.Font.Gotham
+            label.TextSize = 13
+            label.TextColor3 = Color3.fromRGB(220,220,220)
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.Parent = container
+
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(1, 0, 0, 28)
+            box.Position = UDim2.new(0, 0, 0, 20)
+            box.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            box.TextColor3 = Color3.fromRGB(220,220,220)
+            box.PlaceholderText = placeholder or ""
+            box.Font = Enum.Font.Gotham
+            box.TextSize = 14
+            box.Parent = container
+            applyUICorner(box, UDim.new(0,6))
+
+            box.FocusLost:Connect(function(enter)
+                local ok = true
+                if validation then
+                    local succ, res = pcall(function() return validation(box.Text) end)
+                    ok = succ and res
+                end
+                if not ok then
+                    safeTween(box, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(70,35,35)})
+                    task.wait(0.45)
+                    safeTween(box, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(40,40,40)})
+                else
+                    if callback then pcall(callback, box.Text) end
                 end
             end)
+
+            return {
+                SetText = function(t) box.Text = t end,
+                GetText = function() return box.Text end
+            }
         end
-    end)
 
-    TopBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
+        function Tab:CreateKeybind(name, defaultKey, callback)
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 34)
+            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            container.Parent = contentHolder
+            applyUICorner(container, UDim.new(0,6))
+            container.LayoutOrder = 1
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.6, 0, 1, 0)
+            lbl.Position = UDim2.new(0, 10, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = name
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 14
+            lbl.TextColor3 = Color3.fromRGB(220,220,220)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = container
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0.35, -10, 0, 24)
+            btn.Position = UDim2.new(0.6, 10, 0.5, -12)
+            btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 14
+            btn.TextColor3 = Color3.fromRGB(220,220,220)
+            btn.Parent = container
+            applyUICorner(btn, UDim.new(0,4))
+
+            local current = defaultKey or Enum.KeyCode.F
+            btn.Text = tostring(current):gsub("Enum.KeyCode.", "")
+
+            local listening
+            local conn
+            btn.MouseButton1Click:Connect(function()
+                listening = true
+                btn.Text = "..."
+                btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+                conn = UserInputService.InputBegan:Connect(function(inp)
+                    if listening and inp.UserInputType == Enum.UserInputType.Keyboard then
+                        listening = false
+                        current = inp.KeyCode
+                        btn.Text = tostring(current):gsub("Enum.KeyCode.", "")
+                        btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+                        if callback then pcall(callback, current) end
+                        conn:Disconnect()
+                    end
+                end)
+            end)
+
+            return {
+                Set = function(k) current = k; btn.Text = tostring(k):gsub("Enum.KeyCode.", "") end,
+                Get = function() return current end
+            }
         end
-    end)
 
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and draggingUI then
-            update(input)
+        function Tab:CreateToggle(name, default, callback)
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 34)
+            container.BackgroundColor3 = Color3.fromRGB(40,40,40)
+            container.Parent = contentHolder
+            applyUICorner(container, UDim.new(0,6))
+            container.LayoutOrder = 1
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.7, 0, 1, 0)
+            lbl.Position = UDim2.new(0, 10, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = name
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 14
+            lbl.TextColor3 = Color3.fromRGB(220,220,220)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = container
+
+            local switch = Instance.new("TextButton")
+            switch.Size = UDim2.new(0.25, -10, 0, 22)
+            switch.Position = UDim2.new(0.7, 10, 0.5, -11)
+            switch.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            switch.Text = tostring(default and "ON" or "OFF")
+            switch.Font = Enum.Font.GothamBold
+            switch.TextSize = 13
+            switch.TextColor3 = Color3.fromRGB(220,220,220)
+            applyUICorner(switch, UDim.new(0,6))
+            switch.Parent = container
+            local state = default or false
+            switch.MouseButton1Click:Connect(function()
+                state = not state
+                switch.Text = tostring(state and "ON" or "OFF")
+                if callback then pcall(callback, state) end
+            end)
+
+            return {
+                Set = function(s) state = s; switch.Text = tostring(state and "ON" or "OFF") end,
+                Get = function() return state end
+            }
         end
-    end)
-end
 
--- =========================
--- Dropdown Widget
--- =========================
-function LuaUIX.CreateDropdown(parent, name, options, defaultIndex, callback)
-    options = options or {}
-    local dropdownOpen = false
-    local currentSelection = defaultIndex or 1
+        function Tab:CreateSlider(name, min, max, default, callback)
+            min = min or 0; max = max or 100; default = default or min
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 44)
+            container.BackgroundTransparency = 1
+            container.Parent = contentHolder
+            container.LayoutOrder = 1
 
-    local DropdownFrame = Instance.new("Frame")
-    DropdownFrame.Size = UDim2.new(1, 0, 0, 32)
-    DropdownFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    DropdownFrame.Parent = parent
-    Instance.new("UICorner", DropdownFrame).CornerRadius = UDim.new(0,6)
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(0.6, 0, 0, 18)
+            label.BackgroundTransparency = 1
+            label.Text = name
+            label.Font = Enum.Font.Gotham
+            label.TextSize = 13
+            label.TextColor3 = Color3.fromRGB(220,220,220)
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.Parent = container
 
-    local DropdownLabel = Instance.new("TextLabel")
-    DropdownLabel.Size = UDim2.new(1, -30, 1, 0)
-    DropdownLabel.Position = UDim2.new(0, 10, 0, 0)
-    DropdownLabel.BackgroundTransparency = 1
-    DropdownLabel.Text = name .. ": " .. (options[currentSelection] or "")
-    DropdownLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    DropdownLabel.Font = Enum.Font.Gotham
-    DropdownLabel.TextSize = 14
-    DropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-    DropdownLabel.Parent = DropdownFrame
+            local valLabel = Instance.new("TextLabel")
+            valLabel.Size = UDim2.new(0.4, -10, 0, 18)
+            valLabel.Position = UDim2.new(0.6, 10, 0, 0)
+            valLabel.BackgroundTransparency = 1
+            valLabel.Text = tostring(default)
+            valLabel.Font = Enum.Font.Gotham
+            valLabel.TextSize = 13
+            valLabel.TextColor3 = Color3.fromRGB(200,200,200)
+            valLabel.TextXAlignment = Enum.TextXAlignment.Right
+            valLabel.Parent = container
 
-    local DropdownButton = Instance.new("TextButton")
-    DropdownButton.Size = UDim2.new(1, 0, 1, 0)
-    DropdownButton.BackgroundTransparency = 1
-    DropdownButton.Text = ""
-    DropdownButton.Parent = DropdownFrame
+            local barBg = Instance.new("Frame")
+            barBg.Size = UDim2.new(1, 0, 0, 12)
+            barBg.Position = UDim2.new(0, 0, 0, 24)
+            barBg.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            barBg.Parent = container
+            applyUICorner(barBg, UDim.new(0,6))
 
-    local Arrow = Instance.new("TextLabel")
-    Arrow.Size = UDim2.new(0, 20, 0, 20)
-    Arrow.Position = UDim2.new(1, -25, 0.5, -10)
-    Arrow.BackgroundTransparency = 1
-    Arrow.Text = "▼"
-    Arrow.TextColor3 = Color3.fromRGB(200,200,200)
-    Arrow.Font = Enum.Font.Gotham
-    Arrow.TextSize = 12
-    Arrow.Parent = DropdownFrame
+            local barFill = Instance.new("Frame")
+            barFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+            barFill.BackgroundColor3 = Color3.fromRGB(100,100,240)
+            barFill.Parent = barBg
+            applyUICorner(barFill, UDim.new(0,6))
 
-    local OptionsFrame = Instance.new("Frame")
-    OptionsFrame.Size = UDim2.new(1, 0, 0, 0)
-    OptionsFrame.Position = UDim2.new(0, 0, 1, 5)
-    OptionsFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    OptionsFrame.ClipsDescendants = true
-    OptionsFrame.Parent = DropdownFrame
-    Instance.new("UICorner", OptionsFrame).CornerRadius = UDim.new(0,6)
-
-    local OptionsLayout = Instance.new("UIListLayout")
-    OptionsLayout.Parent = OptionsFrame
-    OptionsLayout.Padding = UDim.new(0,4)
-
-    local function updateDropdown()
-        DropdownLabel.Text = name .. ": " .. (options[currentSelection] or "")
-        if callback then
-            pcall(callback, options[currentSelection], currentSelection)
-        end
-        -- persist
-        widgetRegistry.dropdowns[name] = currentSelection
-    end
-
-    local function toggleDropdown()
-        dropdownOpen = not dropdownOpen
-        if dropdownOpen then
-            local height = #options * 30
-            safeTween(OptionsFrame, TweenInfo.new(0.18), {Size = UDim2.new(1, 0, 0, height)})
-            safeTween(Arrow, TweenInfo.new(0.18), {Rotation = 180})
-        else
-            safeTween(OptionsFrame, TweenInfo.new(0.18), {Size = UDim2.new(1, 0, 0, 0)})
-            safeTween(Arrow, TweenInfo.new(0.18), {Rotation = 0})
-        end
-    end
-
-    for i, option in ipairs(options) do
-        local OptionButton = Instance.new("TextButton")
-        OptionButton.Size = UDim2.new(1, -10, 0, 28)
-        OptionButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-        OptionButton.Text = option
-        OptionButton.TextColor3 = Color3.fromRGB(200,200,200)
-        OptionButton.Font = Enum.Font.Gotham
-        OptionButton.TextSize = 14
-        OptionButton.Parent = OptionsFrame
-        Instance.new("UICorner", OptionButton).CornerRadius = UDim.new(0,4)
-
-        OptionButton.MouseButton1Click:Connect(function()
-            currentSelection = i
-            updateDropdown()
-            toggleDropdown()
-        end)
-    end
-
-    DropdownButton.MouseButton1Click:Connect(toggleDropdown)
-
-    updateDropdown()
-
-    return {
-        Set = function(index)
-            if index >= 1 and index <= #options then
-                currentSelection = index
-                updateDropdown()
-            end
-        end,
-        Get = function()
-            return currentSelection, options[currentSelection]
-        end
-    }
-end
-
--- =========================
--- Textbox Widget
--- =========================
-function LuaUIX.CreateTextbox(parent, name, placeholder, callback, validation)
-    local TextboxFrame = Instance.new("Frame")
-    TextboxFrame.Size = UDim2.new(1, 0, 0, 50)
-    TextboxFrame.BackgroundTransparency = 1
-    TextboxFrame.Parent = parent
-
-    local TextboxLabel = Instance.new("TextLabel")
-    TextboxLabel.Size = UDim2.new(1, 0, 0, 20)
-    TextboxLabel.BackgroundTransparency = 1
-    TextboxLabel.Text = name
-    TextboxLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    TextboxLabel.Font = Enum.Font.Gotham
-    TextboxLabel.TextSize = 14
-    TextboxLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TextboxLabel.Parent = TextboxFrame
-
-    local InputBox = Instance.new("TextBox")
-    InputBox.Size = UDim2.new(1, 0, 0, 30)
-    InputBox.Position = UDim2.new(0, 0, 0, 20)
-    InputBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    InputBox.TextColor3 = Color3.fromRGB(200,200,200)
-    InputBox.Font = Enum.Font.Gotham
-    InputBox.TextSize = 14
-    InputBox.PlaceholderText = placeholder or ""
-    InputBox.Text = ""
-    InputBox.Parent = TextboxFrame
-    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0,6)
-
-    InputBox.FocusLost:Connect(function(enterPressed)
-        if validation and not pcall(function() return validation(InputBox.Text) end) then
-            safeTween(InputBox, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(60,40,40)})
-            task.wait(0.45)
-            safeTween(InputBox, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(40,40,40)})
-        else
-            if callback then
-                pcall(callback, InputBox.Text)
-            end
-            widgetRegistry.textboxes[name] = InputBox.Text
-        end
-    end)
-
-    return {
-        SetText = function(text)
-            InputBox.Text = text
-        end,
-        GetText = function()
-            return InputBox.Text
-        end
-    }
-end
-
--- =========================
--- Keybind Picker
--- =========================
-function LuaUIX.CreateKeybindPicker(parent, name, defaultKey, callback)
-    local listening = false
-    local currentKey = defaultKey or Enum.KeyCode.RightControl
-
-    local KeybindFrame = Instance.new("Frame")
-    KeybindFrame.Size = UDim2.new(1, 0, 0, 32)
-    KeybindFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    KeybindFrame.Parent = parent
-    Instance.new("UICorner", KeybindFrame).CornerRadius = UDim.new(0,6)
-
-    local KeybindLabel = Instance.new("TextLabel")
-    KeybindLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    KeybindLabel.Position = UDim2.new(0, 10, 0, 0)
-    KeybindLabel.BackgroundTransparency = 1
-    KeybindLabel.Text = name
-    KeybindLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    KeybindLabel.Font = Enum.Font.Gotham
-    KeybindLabel.TextSize = 14
-    KeybindLabel.TextXAlignment = Enum.TextXAlignment.Left
-    KeybindLabel.Parent = KeybindFrame
-
-    local KeybindButton = Instance.new("TextButton")
-    KeybindButton.Size = UDim2.new(0.35, 0, 0, 24)
-    KeybindButton.Position = UDim2.new(0.6, 5, 0.5, -12)
-    KeybindButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    KeybindButton.Text = tostring(currentKey):gsub("Enum.KeyCode.", "")
-    KeybindButton.TextColor3 = Color3.fromRGB(200,200,200)
-    KeybindButton.Font = Enum.Font.Gotham
-    KeybindButton.TextSize = 14
-    KeybindButton.Parent = KeybindFrame
-    Instance.new("UICorner", KeybindButton).CornerRadius = UDim.new(0,4)
-
-    local function setKey(key)
-        currentKey = key
-        KeybindButton.Text = tostring(key):gsub("Enum.KeyCode.", "")
-        widgetRegistry.keybinds[name] = tostring(key)
-        if callback then
-            pcall(callback, key)
-        end
-    end
-
-    KeybindButton.MouseButton1Click:Connect(function()
-        listening = true
-        KeybindButton.Text = "..."
-        KeybindButton.BackgroundColor3 = Color3.fromRGB(70,70,70)
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(input)
-            if listening and input.UserInputType == Enum.UserInputType.Keyboard then
-                listening = false
-                setKey(input.KeyCode)
-                KeybindButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-                connection:Disconnect()
-            end
-        end)
-    end)
-
-    -- allow programmatic set/get
-    return {
-        SetKey = setKey,
-        GetKey = function()
-            return currentKey
-        end
-    }
-end
-
--- =========================
--- Persistence (save/load)
--- =========================
-local function saveAllSettings()
-    local data = {
-        window = {
-            position = {MainFrame.Position.X.Scale, MainFrame.Position.X.Offset,
-                        MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset},
-            size = {MainFrame.Size.X.Scale, MainFrame.Size.X.Offset,
-                    MainFrame.Size.Y.Scale, MainFrame.Size.Y.Offset}
-        },
-        accentColor = settingsData.accentColor or {0.424, 0.471, 0.906},
-        widgets = widgetRegistry
-    }
-
-    if canFile then
-        pcall(function()
-            writefile(SAVE_FILE, HttpService:JSONEncode(data))
-        end)
-    end
-end
-
-local function loadAllSettings()
-    if canFile and isfile(SAVE_FILE) then
-        pcall(function()
-            local raw = readfile(SAVE_FILE)
-            local data = HttpService:JSONDecode(raw)
-            settingsData = data or settingsData
-            if data and data.window and MainFrame then
-                local p = data.window.position
-                local s = data.window.size
-                if p and s then
-                    MainFrame.Position = UDim2.new(p[1], p[2], p[3], p[4])
-                    MainFrame.Size = UDim2.new(s[1], s[2], s[3], s[4])
+            local dragging = false
+            barBg.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
                 end
-            end
-            if data and data.accentColor then
-                applyAccentColor(Color3.new(data.accentColor[1], data.accentColor[2], data.accentColor[3]))
-            end
-            if data and data.widgets then
-                widgetRegistry = data.widgets
-            end
-        end)
+            end)
+            barBg.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local rel = math.clamp((input.Position.X - barBg.AbsolutePosition.X) / barBg.AbsoluteSize.X, 0, 1)
+                    local v = math.floor(min + rel * (max - min) + 0.5)
+                    barFill.Size = UDim2.new(rel, 0, 1, 0)
+                    valLabel.Text = tostring(v)
+                    if callback then pcall(callback, v) end
+                end
+            end)
+
+            return {
+                Set = function(v)
+                    v = math.clamp(v, min, max)
+                    local rel = (v - min) / (max - min)
+                    barFill.Size = UDim2.new(rel, 0, 1, 0)
+                    valLabel.Text = tostring(v)
+                end,
+                Get = function() return tonumber(valLabel.Text) end
+            }
+        end
+
+        function Tab:CreateButton(text, callback)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 0, 34)
+            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            btn.Text = text
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 14
+            btn.TextColor3 = Color3.fromRGB(235,235,235)
+            applyUICorner(btn, UDim.new(0,6))
+            btn.Parent = contentHolder
+            btn.LayoutOrder = 1
+
+            btn.MouseEnter:Connect(function() safeTween(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(80,80,80)}) end)
+            btn.MouseLeave:Connect(function() safeTween(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(60,60,60)}) end)
+            btn.MouseButton1Click:Connect(function() if callback then pcall(callback) end end)
+
+            return btn
+        end
+
+        function Tab:CreateTooltip(guiObj, text)
+            -- display tooltip using FloatGui
+            if not guiObj or not guiObj:IsA("GuiObject") then return end
+            guiObj.MouseEnter:Connect(function()
+                local t = Instance.new("TextLabel")
+                t.Size = UDim2.new(0, 160, 0, 36)
+                local abs = guiObj.AbsolutePosition
+                t.Position = UDim2.new(0, abs.X, 0, abs.Y + guiObj.AbsoluteSize.Y + 6)
+                t.BackgroundColor3 = Color3.fromRGB(45,45,45)
+                t.TextColor3 = Color3.fromRGB(220,220,220)
+                t.Text = text
+                t.TextWrapped = true
+                t.Font = Enum.Font.Gotham
+                t.TextSize = 12
+                applyUICorner(t, UDim.new(0,6))
+                t.Parent = FloatGui
+                t.ZIndex = 95
+                guiObj.MouseLeave:Wait()
+                t:Destroy()
+            end)
+        end
+
+        return setmetatable(Tab, Tab)
     end
+
+    -- return window object
+    return setmetatable(Window, Window)
 end
 
--- Save on close or periodically
-spawn(function()
-    while ScreenGui.Parent do
-        task.wait(10)
-        pcall(saveAllSettings)
-    end
-end)
-
--- =========================
--- Notification System
--- =========================
-local notificationQueue = {}
-local showingNotification = false
-
-local function processNextNotification()
-    if #notificationQueue == 0 then
-        showingNotification = false
-        return
-    end
-
-    showingNotification = true
-    local notif = table.remove(notificationQueue, 1)
-
-    local Notification = Instance.new("Frame")
-    Notification.Size = UDim2.new(0, 260, 0, 70)
-    Notification.Position = UDim2.new(1, 300, 1, -80) -- start off-screen right
-    Notification.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    Notification.Parent = ScreenGui
-    Instance.new("UICorner", Notification).CornerRadius = UDim.new(0,8)
-    Notification.ZIndex = 100
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -10, 0, 20)
-    Title.Position = UDim2.new(0, 10, 0, 8)
-    Title.BackgroundTransparency = 1
-    Title.Text = notif.title
-    Title.TextColor3 = Color3.fromRGB(200,200,200)
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 14
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Notification
-
-    local Message = Instance.new("TextLabel")
-    Message.Size = UDim2.new(1, -10, 0, 40)
-    Message.Position = UDim2.new(0, 10, 0, 28)
-    Message.BackgroundTransparency = 1
-    Message.Text = notif.message
-    Message.TextColor3 = Color3.fromRGB(180,180,180)
-    Message.Font = Enum.Font.Gotham
-    Message.TextSize = 12
-    Message.TextXAlignment = Enum.TextXAlignment.Left
-    Message.TextYAlignment = Enum.TextYAlignment.Top
-    Message.TextWrapped = true
-    Message.Parent = Notification
-
-    if notif.type == "success" then
-        Title.TextColor3 = Color3.fromRGB(100,200,100)
-    elseif notif.type == "warning" then
-        Title.TextColor3 = Color3.fromRGB(200,200,100)
-    elseif notif.type == "error" then
-        Title.TextColor3 = Color3.fromRGB(200,100,100)
-    end
-
-    safeTween(Notification, TweenInfo.new(0.26), {Position = UDim2.new(1, -280, 1, -80)})
-    task.wait(notif.duration or 4)
-    safeTween(Notification, TweenInfo.new(0.26), {Position = UDim2.new(1, 300, 1, -80)})
-
-    task.wait(0.28)
-    Notification:Destroy()
-    processNextNotification()
+-- Expose quick Save/Load
+function LuaUIX.Save()
+    saveSettings()
+end
+function LuaUIX.Load()
+    loadSettings()
 end
 
-function LuaUIX.Notify(title, message, duration, typ)
-    table.insert(notificationQueue, {title = title or "Notice", message = message or "", duration = duration or 4, type = typ or "info"})
-    if not showingNotification then
-        processNextNotification()
-    end
-end
-
--- =========================
--- Tooltip System
--- =========================
-local tooltip = Instance.new("Frame")
-tooltip.Size = UDim2.new(0, 160, 0, 40)
-tooltip.BackgroundColor3 = Color3.fromRGB(50,50,50)
-tooltip.Visible = false
-tooltip.ZIndex = 200
-tooltip.Parent = ScreenGui
-Instance.new("UICorner", tooltip).CornerRadius = UDim.new(0,6)
-
-local tooltipText = Instance.new("TextLabel")
-tooltipText.Size = UDim2.new(1, -10, 1, -10)
-tooltipText.Position = UDim2.new(0, 5, 0, 5)
-tooltipText.BackgroundTransparency = 1
-tooltipText.TextColor3 = Color3.fromRGB(200,200,200)
-tooltipText.Font = Enum.Font.Gotham
-tooltipText.TextSize = 12
-tooltipText.TextWrapped = true
-tooltipText.Parent = tooltip
-
-local function addTooltip(button, text)
-    if not button then return end
-    button.MouseEnter:Connect(function()
-        tooltipText.Text = text
-        tooltip.Visible = true
-    end)
-    button.MouseMoved:Connect(function(x, y)
-        tooltip.Position = UDim2.new(0, x + 20, 0, y + 20)
-    end)
-    button.MouseLeave:Connect(function()
-        tooltip.Visible = false
-    end)
-end
-
-LuaUIX.AddTooltip = addTooltip
-
--- =========================
--- Mobile support adjustments
--- =========================
-local function applyMobileAdjustments()
-    if UserInputService.TouchEnabled then
-        MainFrame.Size = UDim2.new(0, 520, 0, 320)
-        MainFrame.Position = UDim2.new(0.5, -260, 0.5, -160)
-        -- other touch tweaks can go here
-    end
-end
-
--- =========================
--- Init / Demo UI + Exports
--- =========================
-function LuaUIX:Init()
-    -- attach screen gui
-    if not ScreenGui.Parent then
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    end
-
-    -- create main frame
-    MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 460, 0, 260)
-    MainFrame.Position = UDim2.new(0.5, -230, 0.5, -130)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    MainFrame.Parent = ScreenGui
-    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,6)
-
-    makeTopBarAndClose(MainFrame)
-    applyMobileAdjustments()
-    loadAllSettings()
-
-    -- Demo content area
-    local Content = Instance.new("Frame")
-    Content.Size = UDim2.new(1, -20, 1, -48)
-    Content.Position = UDim2.new(0, 10, 0, 36)
-    Content.BackgroundTransparency = 1
-    Content.Parent = MainFrame
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0,8)
-    layout.Parent = Content
-
-    -- Example: add widgets to demo content
-    local dd = LuaUIX.CreateDropdown(Content, "Mode", {"Off","On","Auto"}, 2, function(val) LuaUIX.Notify("Dropdown", "Selected: "..tostring(val), 2, "info") end)
-    local tb = LuaUIX.CreateTextbox(Content, "Name", "Enter name...", function(txt) LuaUIX.Notify("Textbox", "Saved: "..txt, 2, "success") end)
-    local kb = LuaUIX.CreateKeybindPicker(Content, "Toggle Key", Enum.KeyCode.F, function(key) LuaUIX.Notify("Keybind", "Bound: "..tostring(key).gsub and tostring(key):gsub("Enum.KeyCode.", "") or tostring(key), 2, "info") end)
-
-    -- Add simple tooltip to close button
-    addTooltip(CloseBtn, "Close UI")
-
-    -- Persist example widget values into registry so save/load can find them
-    widgetRegistry.dropdowns["Mode"] = 2
-    widgetRegistry.textboxes["Name"] = ""
-    widgetRegistry.keybinds["Toggle Key"] = tostring(Enum.KeyCode.F)
-
-    -- bind mainframe closing saving
-    CloseBtn.MouseButton1Click:Connect(function()
-        pcall(saveAllSettings)
-    end)
-end
-
--- direct utility exports
-LuaUIX.CreateDropdown = LuaUIX.CreateDropdown
-LuaUIX.CreateTextbox = LuaUIX.CreateTextbox
-LuaUIX.CreateKeybindPicker = LuaUIX.CreateKeybindPicker
-LuaUIX.Save = saveAllSettings
-LuaUIX.Load = loadAllSettings
+-- Backwards-compat helpers (very small)
+LuaUIX.CreateWindow = LuaUIX.CreateWindow
 LuaUIX.Notify = LuaUIX.Notify
-LuaUIX.AddTooltip = addTooltip
+LuaUIX.Save = LuaUIX.Save
+LuaUIX.Load = LuaUIX.Load
 
 return LuaUIX
