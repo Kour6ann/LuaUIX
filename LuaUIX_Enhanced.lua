@@ -1,4 +1,4 @@
--- LuaUIX Library v1.5
+-- LuaUIX Library v1.5 - Complete Implementation
 -- Enhanced UI library for Roblox exploits
 
 local LuaUIX = {}
