@@ -1,567 +1,201 @@
--- LuaUIX_Enhanced.lua
--- Version 1.0.0
--- Single-file UI library that recreates the look from the provided screenshot:
--- - Left sidebar tabs with icons
--- - Rounded main window, titlebar with minimize & close
--- - Theme pill buttons at top
--- - Scrollable content area with "cards" and toggles
--- - API: CreateLib, NewTab, NewSection, NewToggle, NewButton
--- Designed for exploit executors (uses CoreGui/PlayerGui fallback)
+-- LuaUIX v1.0
+-- Clean API + 6 Themes + Advanced Widgets + Config System + Titlebar Controls
 
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
 
-local Library = {}
-Library.__index = Library
-
--- ====== Settings / Theme Colors (matching screenshot style) ======
-local Themes = {
-    Dark = {
-        Background = Color3.fromRGB(27, 28, 37),
-        Window = Color3.fromRGB(26, 28, 37),
-        Sidebar = Color3.fromRGB(22, 24, 33),
-        Card = Color3.fromRGB(34,36,48),
-        Accent = Color3.fromRGB(56,172,212),
-        Accent2 = Color3.fromRGB(147,51,158),
-        Text = Color3.fromRGB(220,224,230),
-        Muted = Color3.fromRGB(151,158,170),
-        Soft = Color3.fromRGB(36,40,50),
-        Highlight = Color3.fromRGB(66, 142, 165)
-    }
-}
-local DefaultTheme = "Dark"
-
--- ====== Utility helpers ======
-local function safeParent(gui)
-    local ok, core = pcall(function() return game:GetService("CoreGui") end)
-    if ok and core then
-        pcall(function() gui.Parent = core end)
-        if gui.Parent then return true end
-    end
-    local lp = Players.LocalPlayer
-    if not lp then
-        lp = Players.PlayerAdded:Wait()
-    end
-    local pg = lp:WaitForChild("PlayerGui")
-    pcall(function() gui.Parent = pg end)
-    return gui.Parent ~= nil
+if CoreGui:FindFirstChild("LuaUIX_Library") then
+    CoreGui.LuaUIX_Library:Destroy()
 end
 
 local function new(class, props)
     local inst = Instance.new(class)
-    if props then
-        for k,v in pairs(props) do
-            if k == "Parent" then
-                inst.Parent = v
-            else
-                pcall(function() inst[k] = v end)
-            end
-        end
-    end
+    for k,v in pairs(props or {}) do inst[k] = v end
     return inst
 end
-
-local function applyTextStyle(lbl, size, bold)
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = size or 14
-    lbl.TextColor3 = Themes[DefaultTheme].Text
-    lbl.BackgroundTransparency = 1
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    if bold then lbl.Font = Enum.Font.GothamBold end
+local function roundify(frame, radius)
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, radius or 8)
 end
 
--- Rounded shadow helper
-local function addRounded(frame, radius)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius or 12)
-    corner.Parent = frame
-    return corner
-end
+-- Themes
+local Themes = {
+    Dark = {Window=Color3.fromRGB(33,34,44),Titlebar=Color3.fromRGB(46,46,66),
+        Sidebar=Color3.fromRGB(27,28,37),Content=Color3.fromRGB(40,42,54),
+        Section=Color3.fromRGB(23,25,34),Accent=Color3.fromRGB(56,172,212),
+        Button=Color3.fromRGB(90,120,255),Text=Color3.fromRGB(255,255,255),SubText=Color3.fromRGB(200,200,200)},
+    Light = {Window=Color3.fromRGB(245,245,245),Titlebar=Color3.fromRGB(220,220,230),
+        Sidebar=Color3.fromRGB(230,230,240),Content=Color3.fromRGB(255,255,255),
+        Section=Color3.fromRGB(240,240,245),Accent=Color3.fromRGB(66,135,245),
+        Button=Color3.fromRGB(50,100,255),Text=Color3.fromRGB(30,30,30),SubText=Color3.fromRGB(80,80,80)},
+    Midnight = {Window=Color3.fromRGB(20,20,30),Titlebar=Color3.fromRGB(25,25,40),
+        Sidebar=Color3.fromRGB(15,15,25),Content=Color3.fromRGB(30,30,45),
+        Section=Color3.fromRGB(20,20,30),Accent=Color3.fromRGB(180,60,255),
+        Button=Color3.fromRGB(120,60,200),Text=Color3.fromRGB(255,255,255),SubText=Color3.fromRGB(180,180,200)},
+    Discord = {Window=Color3.fromRGB(54,57,63),Titlebar=Color3.fromRGB(47,49,54),
+        Sidebar=Color3.fromRGB(41,43,47),Content=Color3.fromRGB(54,57,63),
+        Section=Color3.fromRGB(47,49,54),Accent=Color3.fromRGB(114,137,218),
+        Button=Color3.fromRGB(88,101,242),Text=Color3.fromRGB(255,255,255),SubText=Color3.fromRGB(200,200,200)},
+    Solarized = {Window=Color3.fromRGB(0,43,54),Titlebar=Color3.fromRGB(7,54,66),
+        Sidebar=Color3.fromRGB(0,43,54),Content=Color3.fromRGB(0,43,54),
+        Section=Color3.fromRGB(7,54,66),Accent=Color3.fromRGB(181,137,0),
+        Button=Color3.fromRGB(203,75,22),Text=Color3.fromRGB(238,232,213),SubText=Color3.fromRGB(147,161,161)},
+    Emerald = {Window=Color3.fromRGB(10,30,20),Titlebar=Color3.fromRGB(20,60,40),
+        Sidebar=Color3.fromRGB(15,45,30),Content=Color3.fromRGB(20,60,40),
+        Section=Color3.fromRGB(15,40,25),Accent=Color3.fromRGB(80,200,120),
+        Button=Color3.fromRGB(60,180,100),Text=Color3.fromRGB(220,255,220),SubText=Color3.fromRGB(150,200,160)}
+}
 
--- ====== Library API ======
--- Create base library/window
-function Library.CreateLib(title, options)
-    options = options or {}
-    local themeName = options.Theme or DefaultTheme
-    local theme = Themes[themeName] or Themes[DefaultTheme]
+local Library = {}
+Library.__index = Library
 
+function Library:CreateLib(title, themeName)
+    local theme = Themes[themeName] or Themes.Dark
     local self = setmetatable({}, Library)
-    self.Theme = theme
-    self.Title = title or "LuaUIX Enhanced"
     self.Tabs = {}
+    self.Pages = {}
 
-    -- ScreenGui
-    local screen = new("ScreenGui", {Name = "LuaUIX_Enhanced_ScreenGui", ResetOnSpawn = false})
-    safeParent(screen)
-    self.ScreenGui = screen
+    local gui = new("ScreenGui",{Name="LuaUIX_Library", ResetOnSpawn=false, Parent=CoreGui})
+    local window = new("Frame",{Size=UDim2.new(0,650,0,500),Position=UDim2.new(0.5,-325,0.5,-250),BackgroundColor3=theme.Window,Parent=gui})
+    roundify(window,12)
 
-    -- root frame (centered)
-    local root = new("Frame", {
-        Name = "Root",
-        Size = UDim2.new(0, 760, 0, 720),
-        Position = UDim2.new(0.5, -380, 0.5, -360),
-        AnchorPoint = Vector2.new(0.5,0.5),
-        BackgroundColor3 = theme.Window,
-        BorderSizePixel = 0,
-        Parent = screen
-    })
-    addRounded(root, 14)
+    local titlebar = new("Frame",{Size=UDim2.new(1,0,0,40),BackgroundColor3=theme.Titlebar,Parent=window})
+    roundify(titlebar,12)
+    new("TextLabel",{Size=UDim2.new(1,-50,1,0),Position=UDim2.new(0,10,0,0),BackgroundTransparency=1,Text=title or "LuaUIX",
+        Font=Enum.Font.GothamBold,TextSize=16,TextColor3=theme.Text,TextXAlignment=Enum.TextXAlignment.Left,Parent=titlebar})
 
-    -- subtle outer shadow (using UIStroke and a darker border)
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(10,10,15)
-    stroke.Thickness = 1
-    stroke.Parent = root
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local closeBtn=new("TextButton",{Size=UDim2.new(0,40,1,0),Position=UDim2.new(1,-40,0,0),BackgroundTransparency=1,Text="✕",
+        Font=Enum.Font.GothamBold,TextSize=16,TextColor3=theme.Text,Parent=titlebar})
+    closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+    local miniBtn=new("TextButton",{Size=UDim2.new(0,40,1,0),Position=UDim2.new(1,-80,0,0),BackgroundTransparency=1,Text="—",
+        Font=Enum.Font.GothamBold,TextSize=16,TextColor3=theme.Text,Parent=titlebar})
+    local minimized=false
+    miniBtn.MouseButton1Click:Connect(function() minimized=not minimized; window.Visible=not minimized end)
 
-    -- Titlebar
-    local titlebar = new("Frame", {
-        Name = "Titlebar",
-        Size = UDim2.new(1, 0, 0, 56),
-        Position = UDim2.new(0, 0, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(33, 34, 44),
-        Parent = root
-    })
-    addRounded(titlebar, 12)
+    local sidebar=new("Frame",{Size=UDim2.new(0,150,1,-40),Position=UDim2.new(0,0,0,40),BackgroundColor3=theme.Sidebar,Parent=window})
+    roundify(sidebar,12)
+    local content=new("Frame",{Size=UDim2.new(1,-150,1,-40),Position=UDim2.new(0,150,0,40),BackgroundColor3=theme.Content,Parent=window})
+    roundify(content,12)
 
-    local titleText = new("TextLabel", {
-        Name = "TitleText",
-        Size = UDim2.new(0.7, 0, 1, 0),
-        Position = UDim2.new(0, 18, 0, 0),
-        BackgroundTransparency = 1,
-        Text = " " .. self.Title .. " - v19.1",
-        Parent = titlebar
-    })
-    applyTextStyle(titleText, 18, true)
-    titleText.TextColor3 = theme.Text
+    -- Draggable
+    local dragging,dragStart,startPos
+    titlebar.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=window.Position end end)
+    titlebar.InputChanged:Connect(function(i) if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
+        window.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+(i.Position.X-dragStart.X),startPos.Y.Scale,startPos.Y.Offset+(i.Position.Y-dragStart.Y)) end end)
+    titlebar.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
 
-    -- Minimize + Close buttons (styled)
-    local btnClose = new("TextButton", {
-        Name = "CloseBtn",
-        Size = UDim2.new(0, 44, 0, 30),
-        Position = UDim2.new(1, -58, 0, 12),
-        AnchorPoint = Vector2.new(0,0),
-        BackgroundColor3 = Color3.fromRGB(226, 86, 96),
-        Text = "✕",
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = Color3.fromRGB(255,255,255),
-        Parent = titlebar
-    })
-    addRounded(btnClose, 8)
+    -- RightShift toggle
+    UserInputService.InputBegan:Connect(function(i) if i.KeyCode==Enum.KeyCode.RightShift then gui.Enabled=not gui.Enabled end end)
 
-    local btnMin = new("TextButton", {
-        Name = "MinBtn",
-        Size = UDim2.new(0, 44, 0, 30),
-        Position = UDim2.new(1, -110, 0, 12),
-        AnchorPoint = Vector2.new(0,0),
-        BackgroundColor3 = Color3.fromRGB(229, 105, 97),
-        Text = "–",
-        Font = Enum.Font.GothamBold,
-        TextSize = 18,
-        TextColor3 = Color3.fromRGB(255,255,255),
-        Parent = titlebar
-    })
-    addRounded(btnMin, 8)
+    self.Gui=gui; self.Window=window; self.Sidebar=sidebar; self.Content=content; self.Theme=theme
 
-    -- left sidebar
-    local sidebar = new("Frame", {
-        Name = "Sidebar",
-        Size = UDim2.new(0, 180, 1, -56),
-        Position = UDim2.new(0, 0, 0, 56),
-        BackgroundColor3 = theme.Sidebar,
-        BorderSizePixel = 0,
-        Parent = root
-    })
-    addRounded(sidebar, 12)
+    -- API: NewTab
+    function self:NewTab(name)
+        local page=new("ScrollingFrame",{Name=name,Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Visible=false,ScrollBarThickness=6,Parent=self.Content})
+        local layout=Instance.new("UIListLayout",page);layout.Padding=UDim.new(0,10);layout.SortOrder=Enum.SortOrder.LayoutOrder
+        self.Pages[name]=page
 
-    -- left bar inner padding and list
-    local sideList = new("Frame", {
-        Name = "SideList",
-        Size = UDim2.new(1, -18, 1, -30),
-        Position = UDim2.new(0, 12, 0, 12),
-        BackgroundTransparency = 1,
-        Parent = sidebar
-    })
+        local btn=new("TextButton",{Size=UDim2.new(1,-20,0,40),Position=UDim2.new(0,10,0,10+(#self.Tabs*50)),BackgroundColor3=theme.Section,
+            Text=name,Font=Enum.Font.GothamBold,TextSize=14,TextColor3=theme.Text,Parent=self.Sidebar})
+        roundify(btn,8)
+        btn.MouseButton1Click:Connect(function() for _,p in pairs(self.Pages) do p.Visible=false end page.Visible=true end)
+        if #self.Tabs==0 then page.Visible=true end
 
-    local sideLayout = new("UIListLayout", {Parent = sideList})
-    sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    sideLayout.Padding = UDim.new(0, 12)
+        local Tab={Page=page,Sections={}}
+        function Tab:NewSection(title)
+            local section=new("Frame",{Size=UDim2.new(1,-20,0,150),BackgroundColor3=theme.Section,AutomaticSize=Enum.AutomaticSize.Y,Parent=page})
+            roundify(section,10)
+            local pad=Instance.new("UIPadding",section);pad.PaddingTop=UDim.new(0,10);pad.PaddingLeft=UDim.new(0,10);pad.PaddingRight=UDim.new(0,10);pad.PaddingBottom=UDim.new(0,10)
+            local lay=Instance.new("UIListLayout",section);lay.Padding=UDim.new(0,6);lay.SortOrder=Enum.SortOrder.LayoutOrder
+            new("TextLabel",{Size=UDim2.new(1,0,0,20),BackgroundTransparency=1,Text=title or "Section",Font=Enum.Font.GothamBold,
+                TextSize=14,TextColor3=theme.SubText,TextXAlignment=Enum.TextXAlignment.Left,Parent=section})
 
-    -- function to create a tab button in sidebar
-    local function makeTabButton(text, icon)
-        local container = new("TextButton", {
-            Size = UDim2.new(1, 0, 0, 56),
-            BackgroundColor3 = Color3.fromRGB(42,46,59),
-            BorderSizePixel = 0,
-            Text = "",
-            AutoButtonColor = false,
-            Parent = sideList
-        })
-        addRounded(container, 10)
-
-        local iconLbl = new("TextLabel", {
-            Size = UDim2.new(0, 32, 0, 32),
-            Position = UDim2.new(0, 12, 0, 12),
-            BackgroundTransparency = 1,
-            Text = icon or "◼",
-            Parent = container
-        })
-        iconLbl.Font = Enum.Font.Gotham
-        iconLbl.TextSize = 18
-        iconLbl.TextColor3 = theme.Accent
-
-        local label = new("TextLabel", {
-            Size = UDim2.new(1, -64, 1, 0),
-            Position = UDim2.new(0, 56, 0, 0),
-            BackgroundTransparency = 1,
-            Text = text or "Tab",
-            Parent = container
-        })
-        applyTextStyle(label, 15, true)
-        label.TextColor3 = theme.Text
-
-        return container
-    end
-
-    -- create a content area on the right
-    local contentArea = new("Frame", {
-        Name = "ContentArea",
-        Size = UDim2.new(1, -200, 1, -56),
-        Position = UDim2.new(0, 200, 0, 56),
-        BackgroundTransparency = 1,
-        Parent = root
-    })
-
-    -- top-right area (theme pills)
-    local topRight = new("Frame", {
-        Name = "TopRight",
-        Size = UDim2.new(1, -200, 0, 96),
-        Position = UDim2.new(0, 200, 0, 8),
-        BackgroundTransparency = 1,
-        Parent = root
-    })
-
-    -- holder for theme pills
-    local pillHolder = new("Frame", {
-        Name = "PillHolder",
-        Size = UDim2.new(0.6, 0, 1, 0),
-        Position = UDim2.new(0, 24, 0, 10),
-        BackgroundTransparency = 1,
-        Parent = topRight
-    })
-
-    local pillLayout = Instance.new("UIListLayout", pillHolder)
-    pillLayout.FillDirection = Enum.FillDirection.Horizontal
-    pillLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pillLayout.Padding = UDim.new(0, 14)
-
-    local function makePill(text, bg, textColor)
-        local p = new("TextButton", {
-            Size = UDim2.new(0, 120, 0, 40),
-            BackgroundColor3 = bg,
-            Text = text,
-            AutoButtonColor = false,
-            Parent = pillHolder
-        })
-        local c = addRounded(p, 10)
-        p.Font = Enum.Font.GothamBold
-        p.TextSize = 14
-        p.TextColor3 = textColor or theme.Text
-        return p
-    end
-
-    -- add sample pills (Dark, Light, Midnight, Custom)
-    local pillDark = makePill("Dark", theme.Soft, theme.Text)
-    local pillLight = makePill("Light", Color3.fromRGB(250,250,250), Color3.fromRGB(24,24,24))
-    local pillMidnight = makePill("Midnight", Color3.fromRGB(10,10,20), Color3.fromRGB(180,200,220))
-    local pillCustom = makePill("Custom", theme.Accent2, Color3.fromRGB(255,220,80))
-
-    -- Scrollable container for the main content on the right
-    local scrollFrame = new("ScrollingFrame", {
-        Name = "MainScroll",
-        Size = UDim2.new(1, -28, 1, -120),
-        Position = UDim2.new(0, 12, 0, 120),
-        BackgroundTransparency = 1,
-        ScrollBarThickness = 8,
-        Parent = contentArea
-    })
-    local canvas = Instance.new("UIListLayout", scrollFrame)
-    canvas.SortOrder = Enum.SortOrder.LayoutOrder
-    canvas.Padding = UDim.new(0, 18)
-
-    -- style the scrollbar minimally
-    local uiStroke = Instance.new("UIStroke", root)
-    uiStroke.Thickness = 0.7
-    uiStroke.Color = Color3.fromRGB(18,18,24)
-    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-    -- helper to create a "card" (rounded panel with title and body)
-    local function makeCard(title, bodyText)
-        local card = new("Frame", {
-            Size = UDim2.new(1, -24, 0, 160),
-            BackgroundColor3 = theme.Card,
-            BorderSizePixel = 0,
-            Parent = scrollFrame
-        })
-        addRounded(card, 12)
-
-        local header = new("TextLabel", {
-            Size = UDim2.new(1, -24, 0, 36),
-            Position = UDim2.new(0, 12, 0, 12),
-            BackgroundTransparency = 1,
-            Text = title,
-            Parent = card
-        })
-        applyTextStyle(header, 16, true)
-        header.TextColor3 = theme.Accent
-
-        local body = new("TextLabel", {
-            Size = UDim2.new(1, -36, 0, 84),
-            Position = UDim2.new(0, 12, 0, 48),
-            BackgroundTransparency = 1,
-            Text = bodyText or "",
-            TextWrapped = true,
-            Parent = card
-        })
-        applyTextStyle(body, 14, false)
-        body.TextColor3 = theme.Muted
-
-        return card
-    end
-
-    -- toggle widget creator (stylish pill)
-    local function createToggle(parent, default)
-        local current = default and true or false
-        local container = new("Frame", {
-            Size = UDim2.new(0, 96, 0, 36),
-            BackgroundTransparency = 1,
-            Parent = parent
-        })
-        local pill = new("TextButton", {
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundColor3 = current and theme.Accent or theme.Soft,
-            Text = (current and "On" or "Off"),
-            AutoButtonColor = false,
-            Parent = container
-        })
-        addRounded(pill, 18)
-        pill.Font = Enum.Font.GothamBold
-        pill.TextSize = 14
-        pill.TextColor3 = Color3.fromRGB(250,250,250)
-
-        function container:GetValue()
-            return current
-        end
-        function container:SetValue(v)
-            current = not not v
-            pill.BackgroundColor3 = current and theme.Accent or theme.Soft
-            pill.Text = current and "On" or "Off"
-        end
-
-        pill.MouseButton1Click:Connect(function()
-            container:SetValue(not current)
-        end)
-
-        return container
-    end
-
-    -- Public API functions for building UI (Tab / Section / Widgets)
-    function self:NewTab(name, icon)
-        local tabBtn = makeTabButton(name, icon)
-        local contentFrame = Instance.new("Frame")
-        contentFrame.Name = name .. "_Content"
-        contentFrame.Size = UDim2.new(1, -28, 1, -0)
-        contentFrame.Position = UDim2.new(0, 12, 0, 0)
-        contentFrame.BackgroundTransparency = 1
-        contentFrame.Visible = false
-        contentFrame.Parent = contentArea
-
-        -- keep content scrollable separate
-        -- create inner scroll for tab content
-        local innerScroll = Instance.new("ScrollingFrame", contentFrame)
-        innerScroll.Name = "Scroll"
-        innerScroll.Size = UDim2.new(1, -12, 1, -12)
-        innerScroll.Position = UDim2.new(0, 6, 0, 6)
-        innerScroll.BackgroundTransparency = 1
-        innerScroll.ScrollBarThickness = 8
-
-        local list = Instance.new("UIListLayout", innerScroll)
-        list.SortOrder = Enum.SortOrder.LayoutOrder
-        list.Padding = UDim.new(0, 18)
-
-        -- Tab object to return
-        local tabObj = {}
-        tabObj.Name = name
-        tabObj.Button = tabBtn
-        tabObj.Content = innerScroll
-        tabObj.Sections = {}
-
-        -- clicking tab: hide others, show this
-        tabBtn.MouseButton1Click:Connect(function()
-            for _, t in pairs(self.Tabs) do
-                t.Button.BackgroundColor3 = Color3.fromRGB(42,46,59)
-                t.Content.Visible = false
+            local Sec={}
+            function Sec:NewToggle(text,default,callback)
+                local btn=new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=default and theme.Accent or theme.Section,Text=text or "Toggle",
+                    Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,AutoButtonColor=false,Parent=section})
+                roundify(btn,6)
+                local state=default or false
+                btn.MouseButton1Click:Connect(function() state=not state;btn.BackgroundColor3=state and theme.Accent or theme.Section;if callback then callback(state) end end)
             end
-            tabBtn.BackgroundColor3 = Color3.fromRGB(30,36,55)
-            innerScroll.Visible = true
-        end)
-
-        -- if first tab, open
-        if #self.Tabs == 0 then
-            tabBtn.BackgroundColor3 = Color3.fromRGB(30,36,55)
-            innerScroll.Visible = true
-        end
-
-        function tabObj:NewSection(title)
-            local sectionFrame = Instance.new("Frame", innerScroll)
-            sectionFrame.Size = UDim2.new(1, -24, 0, 160)
-            sectionFrame.BackgroundColor3 = Color3.fromRGB(23,25,34)
-            sectionFrame.BorderSizePixel = 0
-            addRounded(sectionFrame, 12)
-
-            local header = new("TextLabel", {
-                Text = title or "Section",
-                BackgroundTransparency = 1,
-                Parent = sectionFrame
-            })
-            header.Size = UDim2.new(1, -24, 0, 30)
-            header.Position = UDim2.new(0, 12, 0, 8)
-            applyTextStyle(header, 16, true)
-            header.TextColor3 = theme.Highlight
-
-            -- Inner container for controls
-            local inner = Instance.new("Frame", sectionFrame)
-            inner.Size = UDim2.new(1, -24, 1, -48)
-            inner.Position = UDim2.new(0, 12, 0, 44)
-            inner.BackgroundTransparency = 1
-
-            local secObj = {Frame = sectionFrame, Inner = inner, Widgets = {}}
-
-            function secObj:NewToggle(text, default, callback)
-                local row = Instance.new("Frame", inner)
-                row.Size = UDim2.new(1, 0, 0, 36)
-                row.BackgroundTransparency = 1
-
-                local lbl = new("TextLabel", {
-                    Text = text or "Toggle",
-                    Size = UDim2.new(0.7, 0, 1, 0),
-                    Position = UDim2.new(0, 6, 0, 0),
-                    Parent = row
-                })
-                applyTextStyle(lbl, 14, false)
-                lbl.TextColor3 = theme.Text
-
-                local toggle = createToggle(row, default)
-                toggle:SetValue(default)
-                toggleFrame = toggle
-                toggle.Parent = row
-                toggle.Position = UDim2.new(1, -110, 0, 2)
-                toggle.AnchorPoint = Vector2.new(1,0)
-
-                if callback then
-                    -- connect to value changes by wrapping SetValue (non-intrusive)
-                    local oldSet = toggle.SetValue
-                    function toggle:SetValue(v)
-                        oldSet(self, v)
-                        pcall(function() callback(v) end)
-                    end
+            function Sec:NewButton(text,callback)
+                local btn=new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Button,Text=text or "Button",
+                    Font=Enum.Font.GothamBold,TextSize=14,TextColor3=theme.Text,Parent=section})
+                roundify(btn,6)
+                btn.MouseButton1Click:Connect(function() if callback then callback() end end)
+            end
+            function Sec:NewSlider(text,min,max,default,callback)
+                local frame=new("Frame",{Size=UDim2.new(1,0,0,50),BackgroundTransparency=1,Parent=section})
+                local label=new("TextLabel",{Size=UDim2.new(1,0,0,20),BackgroundTransparency=1,Text=text..": "..(default or min),
+                    Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.SubText,TextXAlignment=Enum.TextXAlignment.Left,Parent=frame})
+                local back=new("Frame",{Size=UDim2.new(1,-20,0,8),Position=UDim2.new(0,10,0,30),BackgroundColor3=Color3.fromRGB(60,60,80),Parent=frame})
+                roundify(back,4)
+                local fill=new("Frame",{Size=UDim2.new((default or min)/max,0,1,0),BackgroundColor3=theme.Accent,Parent=back});roundify(fill,4)
+                local dragging=false
+                UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
+                    local rel=math.clamp((i.Position.X-back.AbsolutePosition.X)/back.AbsoluteSize.X,0,1)
+                    fill.Size=UDim2.new(rel,0,1,0)
+                    local val=math.floor(min+(max-min)*rel)
+                    label.Text=text..": "..val
+                    if callback then callback(val) end
+                end end)
+                back.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end end)
+                back.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+            end
+            function Sec:NewDropdown(text,options,callback)
+                local frame=new("Frame",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,Parent=section})
+                roundify(frame,6)
+                local btn=new("TextButton",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Text=text.." ▼",Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=frame})
+                local list=new("Frame",{Size=UDim2.new(1,0,0,#options*28),BackgroundColor3=theme.Content,Visible=false,Parent=section});roundify(list,6)
+                local layout=Instance.new("UIListLayout",list)
+                for _,opt in ipairs(options) do
+                    local optBtn=new("TextButton",{Size=UDim2.new(1,0,0,28),BackgroundTransparency=1,Text=opt,Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.SubText,Parent=list})
+                    optBtn.MouseButton1Click:Connect(function() btn.Text=text..": "..opt;list.Visible=false;if callback then callback(opt) end end)
                 end
-
-                table.insert(secObj.Widgets, toggle)
-                return toggle
+                btn.MouseButton1Click:Connect(function() list.Visible=not list.Visible end)
+            end
+            function Sec:NewTextbox(text,default,callback)
+                local box=new("TextBox",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,Text=default or "",PlaceholderText=text or "Enter text...",
+                    Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section})
+                roundify(box,6)
+                box.FocusLost:Connect(function() if callback then callback(box.Text) end end)
+            end
+            function Sec:NewParagraph(title,contentText)
+                local frame=new("Frame",{Size=UDim2.new(1,0,0,80),BackgroundColor3=theme.Section,Parent=section});roundify(frame,6)
+                new("TextLabel",{Size=UDim2.new(1,-10,0,20),Position=UDim2.new(0,5,0,5),BackgroundTransparency=1,Text=title,Font=Enum.Font.GothamBold,TextSize=14,TextColor3=theme.Text,TextXAlignment=Enum.TextXAlignment.Left,Parent=frame})
+                new("TextLabel",{Size=UDim2.new(1,-10,1,-25),Position=UDim2.new(0,5,0,25),BackgroundTransparency=1,Text=contentText,Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.SubText,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top,Parent=frame})
+            end
+            function Sec:NewKeybind(text,key,callback)
+                local btn=new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,Text=text.." ["..key.Name.."]",
+                    Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section});roundify(btn,6)
+                UserInputService.InputBegan:Connect(function(i) if i.KeyCode==key then if callback then callback() end end end)
+            end
+            function Sec:NewColorPicker(text,default,callback)
+                local btn=new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=default or theme.Accent,Text=text or "Pick Color",
+                    Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section});roundify(btn,6)
+                btn.MouseButton1Click:Connect(function() if callback then callback(btn.BackgroundColor3) end end)
             end
 
-            function secObj:NewButton(text, callback)
-                local btn = new("TextButton", {
-                    Text = text or "Button",
-                    Size = UDim2.new(0.45, 0, 0, 36),
-                    BackgroundColor3 = theme.Highlight,
-                    BorderSizePixel = 0,
-                    Parent = inner
-                })
-                addRounded(btn, 8)
-                btn.Font = Enum.Font.GothamBold
-                btn.TextSize = 14
-                btn.TextColor3 = Color3.fromRGB(255,255,255)
-                btn.MouseButton1Click:Connect(function()
-                    pcall(function() callback() end)
-                end)
-                table.insert(secObj.Widgets, btn)
-                return btn
-            end
-
-            table.insert(self.Tabs, tabObj)
-            table.insert(tabObj.Sections, secObj)
-            return secObj
+            table.insert(Tab.Sections,Sec)
+            return Sec
         end
 
-        table.insert(self.Tabs, tabObj)
-        return tabObj
+        table.insert(self.Tabs,Tab)
+        return Tab
     end
 
-    -- theme pill interactions (basic)
-    pillDark.MouseButton1Click:Connect(function()
-        -- no-op; it's the default look
-    end)
-    pillLight.MouseButton1Click:Connect(function()
-        -- quick fake "light" override (not full re-theme)
-        root.BackgroundColor3 = Color3.fromRGB(246,246,246)
-        titlebar.BackgroundColor3 = Color3.fromRGB(246,246,246)
-    end)
-
-    -- close/minimize behavior
-    btnClose.MouseButton1Click:Connect(function()
-        pcall(function() screen:Destroy() end)
-    end)
-    local minimized = false
-    btnMin.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        if minimized then
-            -- collapse content area
-            contentArea.Visible = false
-            sidebar.Visible = false
-            titlebar.Size = UDim2.new(1, 0, 0, 56)
-            root.Size = UDim2.new(0, 360, 0, 84)
-        else
-            contentArea.Visible = true
-            sidebar.Visible = true
-            titlebar.Size = UDim2.new(1, 0, 0, 56)
-            root.Size = UDim2.new(0, 760, 0, 720)
-        end
-    end)
-
-    -- minimal drag for window (click+drag titlebar)
-    do
-        local dragging = false
-        local dragStart = nil
-        local startPos = nil
-        titlebar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position
-                startPos = root.Position
-            end
-        end)
-        titlebar.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end)
-        game:GetService("UserInputService").InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                local delta = input.Position - dragStart
-                root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end)
+    -- Config Save/Load
+    function self:SaveConfig(name)
+        if not writefile then return end
+        local data={} -- TODO: collect widget states
+        writefile(name..".json",HttpService:JSONEncode(data))
     end
-
-    -- expose some internals for further customization
-    self.ScreenGui = screen
-    self.Root = root
-    self.Sidebar = sidebar
-    self.ContentArea = contentArea
+    function self:LoadConfig(name)
+        if not readfile then return end
+        local raw=readfile(name..".json")
+        local data=HttpService:JSONDecode(raw)
+        -- TODO: apply to widgets
+    end
 
     return self
 end
