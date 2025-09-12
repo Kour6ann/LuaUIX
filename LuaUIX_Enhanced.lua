@@ -1,4 +1,4 @@
--- LuaUIX v19.0 - Enhanced UI Library with Proper API Structure
+-- LuaUIX v19.1 - Enhanced UI Library with Proper API Structure
 -- Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -11,7 +11,7 @@ local RunService = game:GetService("RunService")
 -- Library Table
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
-LuaUIX.Version = "19.0"
+LuaUIX.Version = "19.1"
 LuaUIX.Themes = {}
 LuaUIX.Elements = {}
 
@@ -362,6 +362,21 @@ function LuaUIX:CreateWindow(options)
             LuaUIX.CurrentTheme = LuaUIX.Themes[themeName]
             settingsData.theme = themeName
             saveSettings()
+            self.Theme = themeName  -- Update window theme property
+            
+            -- Update theme labels across all tabs
+            for _, tab in pairs(self.Tabs) do
+                for _, section in pairs(tab.Elements) do
+                    for _, element in pairs(section.Elements) do
+                        if element.Type == "Label" and string.find(element.Text or "", "Current theme:") then
+                            element:SetText("Current theme: " .. themeName)
+                        end
+                        if element.ApplyTheme then
+                            element:ApplyTheme()
+                        end
+                    end
+                end
+            end
             self:ApplyTheme()
         end
     end
@@ -711,6 +726,7 @@ function LuaUIX:CreateWindow(options)
                 dropdownLabel.TextSize = 14
                 dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
                 dropdownLabel.Parent = dropdownFrame
+                dropdown.Label = dropdownLabel
 
                 local dropdownArrow = Instance.new("TextLabel")
                 dropdownArrow.Size = UDim2.new(0, 20, 1, 0)
@@ -755,7 +771,9 @@ function LuaUIX:CreateWindow(options)
                     if dropdown.MultiSelect then
                         local names = {}
                         for _, idx in ipairs(dropdown.SelectedIndices or {}) do
-                            if dropdown.Options[idx] then table.insert(names, dropdown.Options[idx]) end
+                            if dropdown.Options[idx] then 
+                                table.insert(names, dropdown.Options[idx]) 
+                            end
                         end
                         dropdownLabel.Text = name .. ": " .. (#names > 0 and table.concat(names, ", ") or "Select...")
                     else
@@ -1237,7 +1255,7 @@ end)
 
 -- Send welcome notification
 task.delay(1, function()
-    LuaUIX:Notify("LuaUIX v19.0", "UI Library loaded successfully!", 3)
+    LuaUIX:Notify("LuaUIX v19.1", "UI Library loaded successfully!", 3)
 end)
 
 -- Return the library for external use
