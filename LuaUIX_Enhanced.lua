@@ -381,17 +381,31 @@ function LuaUIX:CreateWindow(options)
         end
     end
 
-    function window:ApplyTheme()
+        function window:ApplyTheme()
         self.MainFrame.BackgroundColor3 = LuaUIX.CurrentTheme.Main
         self.TopBar.BackgroundColor3 = LuaUIX.CurrentTheme.TopBar
         self.TabBar.BackgroundColor3 = LuaUIX.CurrentTheme.TabBar
         self.TabHolder.BackgroundColor3 = LuaUIX.CurrentTheme.Content
-        
+
+        -- Ensure header bar text/buttons stay readable
+        if self.TopBar:FindFirstChild("TextLabel") then
+            self.TopBar.TextLabel.TextColor3 = LuaUIX.CurrentTheme.Text
+        end
+        if self.TopBar:FindFirstChild("TextButton") then
+            for _,btn in pairs(self.TopBar:GetChildren()) do
+                if btn:IsA("TextButton") then
+                    btn.TextColor3 = LuaUIX.CurrentTheme.Text
+                end
+            end
+        end
+
         -- Update all elements
         for _, element in pairs(self.Elements) do
             if element.ApplyTheme then
                 element:ApplyTheme()
             end
+        end
+    end
         end
     end
 
