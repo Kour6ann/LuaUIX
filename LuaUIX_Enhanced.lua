@@ -381,7 +381,7 @@ function LuaUIX:CreateWindow(options)
         end
     end
 
-        function window:ApplyTheme()
+    function window:ApplyTheme()
         self.MainFrame.BackgroundColor3 = LuaUIX.CurrentTheme.Main
         self.TopBar.BackgroundColor3 = LuaUIX.CurrentTheme.TopBar
         self.TabBar.BackgroundColor3 = LuaUIX.CurrentTheme.TabBar
@@ -404,8 +404,6 @@ function LuaUIX:CreateWindow(options)
             if element.ApplyTheme then
                 element:ApplyTheme()
             end
-        end
-    end
         end
     end
 
