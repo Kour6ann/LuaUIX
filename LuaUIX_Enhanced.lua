@@ -1,222 +1,3 @@
--- LuaUIX v1.0
--- Full UI Library with 6 Themes, Advanced Widgets, Config System, Titlebar Controls
-
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-
--- Clean up any old instance
-if CoreGui:FindFirstChild("LuaUIX_Library") then
-    CoreGui.LuaUIX_Library:Destroy()
-end
-
--- Helper functions
-local function new(class, props)
-    local inst = Instance.new(class)
-    for k, v in pairs(props or {}) do
-        inst[k] = v
-    end
-    return inst
-end
-
-local function roundify(frame, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)
-    c.Parent = frame
-end
-
--- Theme definitions
-local Themes = {
-    Dark = {
-        Window = Color3.fromRGB(33,34,44),
-        Titlebar = Color3.fromRGB(46,46,66),
-        Sidebar = Color3.fromRGB(27,28,37),
-        Content = Color3.fromRGB(40,42,54),
-        Section = Color3.fromRGB(23,25,34),
-        Accent = Color3.fromRGB(56,172,212),
-        Button = Color3.fromRGB(90,120,255),
-        Text = Color3.fromRGB(255,255,255),
-        SubText = Color3.fromRGB(200,200,200)
-    },
-    Light = {
-        Window = Color3.fromRGB(245,245,245),
-        Titlebar = Color3.fromRGB(220,220,230),
-        Sidebar = Color3.fromRGB(230,230,240),
-        Content = Color3.fromRGB(255,255,255),
-        Section = Color3.fromRGB(240,240,245),
-        Accent = Color3.fromRGB(66,135,245),
-        Button = Color3.fromRGB(50,100,255),
-        Text = Color3.fromRGB(30,30,30),
-        SubText = Color3.fromRGB(80,80,80)
-    },
-    Midnight = {
-        Window = Color3.fromRGB(20,20,30),
-        Titlebar = Color3.fromRGB(25,25,40),
-        Sidebar = Color3.fromRGB(15,15,25),
-        Content = Color3.fromRGB(30,30,45),
-        Section = Color3.fromRGB(20,20,30),
-        Accent = Color3.fromRGB(180,60,255),
-        Button = Color3.fromRGB(120,60,200),
-        Text = Color3.fromRGB(255,255,255),
-        SubText = Color3.fromRGB(180,180,200)
-    },
-    Discord = {
-        Window = Color3.fromRGB(54,57,63),
-        Titlebar = Color3.fromRGB(47,49,54),
-        Sidebar = Color3.fromRGB(41,43,47),
-        Content = Color3.fromRGB(54,57,63),
-        Section = Color3.fromRGB(47,49,54),
-        Accent = Color3.fromRGB(114,137,218),
-        Button = Color3.fromRGB(88,101,242),
-        Text = Color3.fromRGB(255,255,255),
-        SubText = Color3.fromRGB(200,200,200)
-    },
-    Solarized = {
-        Window = Color3.fromRGB(0,43,54),
-        Titlebar = Color3.fromRGB(7,54,66),
-        Sidebar = Color3.fromRGB(0,43,54),
-        Content = Color3.fromRGB(0,43,54),
-        Section = Color3.fromRGB(7,54,66),
-        Accent = Color3.fromRGB(181,137,0),
-        Button = Color3.fromRGB(203,75,22),
-        Text = Color3.fromRGB(238,232,213),
-        SubText = Color3.fromRGB(147,161,161)
-    },
-    Emerald = {
-        Window = Color3.fromRGB(10,30,20),
-        Titlebar = Color3.fromRGB(20,60,40),
-        Sidebar = Color3.fromRGB(15,45,30),
-        Content = Color3.fromRGB(20,60,40),
-        Section = Color3.fromRGB(15,40,25),
-        Accent = Color3.fromRGB(80,200,120),
-        Button = Color3.fromRGB(60,180,100),
-        Text = Color3.fromRGB(220,255,220),
-        SubText = Color3.fromRGB(150,200,160)
-    }
-}
-
--- Library
-local Library = {}
-Library.__index = Library
-
-function Library:CreateLib(title, themeName)
-    local theme = Themes[themeName] or Themes.Dark
-    local self = setmetatable({}, Library)
-    self.Tabs = {}
-    self.Pages = {}
-    self.Config = {}
-
-    -- Gui root
-    local gui = new("ScreenGui", {Name = "LuaUIX_Library", ResetOnSpawn = false, Parent = CoreGui})
-    local window = new("Frame", {
-        Size = UDim2.new(0, 650, 0, 500),
-        Position = UDim2.new(0.5, -325, 0.5, -250),
-        BackgroundColor3 = theme.Window,
-        Parent = gui
-    })
-    roundify(window, 12)
-
-    -- Titlebar
-    local titlebar = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = theme.Titlebar, Parent = window})
-    roundify(titlebar, 12)
-    new("TextLabel", {
-        Size = UDim2.new(1, -50, 1, 0),
-        Position = UDim2.new(0, 10, 0, 0),
-        BackgroundTransparency = 1,
-        Text = title or "LuaUIX",
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = theme.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = titlebar
-    })
-
-    local closeBtn = new("TextButton", {
-        Size = UDim2.new(0, 40, 1, 0),
-        Position = UDim2.new(1, -40, 0, 0),
-        BackgroundTransparency = 1,
-        Text = "✕",
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = theme.Text,
-        Parent = titlebar
-    })
-    closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
-
-    local miniBtn = new("TextButton", {
-        Size = UDim2.new(0, 40, 1, 0),
-        Position = UDim2.new(1, -80, 0, 0),
-        BackgroundTransparency = 1,
-        Text = "—",
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = theme.Text,
-        Parent = titlebar
-    })
-    local minimized = false
-    miniBtn.MouseButton1Click:Connect(function() minimized = not minimized; window.Visible = not minimized end)
-
-    -- Sidebar + content
-    local sidebar = new("Frame", {
-        Size = UDim2.new(0, 150, 1, -40),
-        Position = UDim2.new(0, 0, 0, 40),
-        BackgroundColor3 = theme.Sidebar,
-        Parent = window
-    })
-    roundify(sidebar, 12)
-    local content = new("Frame", {
-        Size = UDim2.new(1, -150, 1, -40),
-        Position = UDim2.new(0, 150, 0, 40),
-        BackgroundColor3 = theme.Content,
-        Parent = window
-    })
-    roundify(content, 12)
-
-    -- Draggable
-    local dragging, dragStart, startPos
-    titlebar.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = i.Position
-            startPos = window.Position
-        end
-    end)
-    titlebar.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + (i.Position.X - dragStart.X),
-                                        startPos.Y.Scale, startPos.Y.Offset + (i.Position.Y - dragStart.Y))
-        end
-    end)
-    titlebar.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-
-    -- RightShift toggle
-    UserInputService.InputBegan:Connect(function(i)
-        if i.KeyCode == Enum.KeyCode.RightShift then gui.Enabled = not gui.Enabled end
-    end)
-
-    self.Gui = gui
-    self.Window = window
-    self.Sidebar = sidebar
-    self.Content = content
-    self.Theme = theme
-
-    -- API: Tabs
-    function self:NewTab(name)
-        local page = new("ScrollingFrame", {
-            Name = name,
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            Visible = false,
-            ScrollBarThickness = 6,
-            Parent = self.Content
-        })
-        local layout = Instance.new("UIListLayout", page)
-        layout.Padding = UDim.new(0, 10)
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        self.Pages[name] = page
-
         local btn = new("TextButton", {
             Size = UDim2.new(1, -20, 0, 40),
             Position = UDim2.new(0, 10, 0, 10 + (#self.Tabs * 50)),
@@ -233,9 +14,10 @@ function Library:CreateLib(title, themeName)
             page.Visible = true
         end)
         if #self.Tabs == 0 then page.Visible = true end
+
         local Tab = { Page = page, Sections = {}, Parent = self }
 
-        -- Sections
+        -- Section
         function Tab:NewSection(title)
             local section = new("Frame", {
                 Size = UDim2.new(1, -20, 0, 150),
@@ -255,6 +37,11 @@ function Library:CreateLib(title, themeName)
             lay.Padding = UDim.new(0, 6)
             lay.SortOrder = Enum.SortOrder.LayoutOrder
 
+            -- Auto resize section
+            lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                section.Size = UDim2.new(1, -20, 0, lay.AbsoluteContentSize.Y + 40)
+            end)
+
             new("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 20),
                 BackgroundTransparency = 1,
@@ -270,7 +57,7 @@ function Library:CreateLib(title, themeName)
 
             -- TOGGLE
             function Sec:NewToggle(text, default, callback)
-                local id = "Toggle_" .. text
+                local id = SessionID .. "_Toggle_" .. text
                 local btn = new("TextButton", {
                     Size = UDim2.new(1, 0, 0, 30),
                     BackgroundColor3 = default and theme.Accent or theme.Section,
@@ -320,7 +107,7 @@ function Library:CreateLib(title, themeName)
 
             -- SLIDER
             function Sec:NewSlider(text, min, max, default, callback)
-                local id = "Slider_" .. text
+                local id = SessionID .. "_Slider_" .. text
                 local frame = new("Frame", {Size = UDim2.new(1,0,0,50),BackgroundTransparency=1,Parent=section})
                 local label = new("TextLabel", {
                     Size = UDim2.new(1,0,0,20),BackgroundTransparency=1,
@@ -364,7 +151,7 @@ function Library:CreateLib(title, themeName)
 
             -- DROPDOWN
             function Sec:NewDropdown(text, options, callback)
-                local id = "Dropdown_" .. text
+                local id = SessionID .. "_Dropdown_" .. text
                 local frame = new("Frame",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,Parent=section})
                 roundify(frame,6)
                 local btn = new("TextButton",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Text=text.." ▼",
@@ -399,7 +186,7 @@ function Library:CreateLib(title, themeName)
 
             -- TEXTBOX
             function Sec:NewTextbox(text, default, callback)
-                local id = "Textbox_" .. text
+                local id = SessionID .. "_Textbox_" .. text
                 local box = new("TextBox",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,
                     Text=default or "",PlaceholderText=text or "Enter text...",
                     Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section})
@@ -432,7 +219,7 @@ function Library:CreateLib(title, themeName)
 
             -- KEYBIND
             function Sec:NewKeybind(text, key, callback)
-                local id = "Keybind_" .. text
+                local id = SessionID .. "_Keybind_" .. text
                 local btn = new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=theme.Section,
                     Text=text.." ["..key.Name.."]",Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section})
                 roundify(btn,6)
@@ -453,7 +240,7 @@ function Library:CreateLib(title, themeName)
 
             -- COLOR PICKER
             function Sec:NewColorPicker(text, default, callback)
-                local id = "Color_" .. text
+                local id = SessionID .. "_Color_" .. text
                 local color = default or theme.Accent
                 local btn = new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=color,Text=text or "Pick Color",
                     Font=Enum.Font.Gotham,TextSize=14,TextColor3=theme.Text,Parent=section})
