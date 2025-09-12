@@ -1,429 +1,569 @@
--- LuaUIX.lua
--- Version: 1.0.0
--- License: MIT
--- Copyright (c) 2025 <your-username>
---
--- Minimal, robust UI library focused on exploit executor compatibility:
--- - Safe file read/write wrappers (works with common executor functions)
--- - CoreGui / PlayerGui fallback for parenting
--- - CreateWindow API with ConfigurationSaving, ConfigFolder, FileName
--- - RegisterFlag / CollectConfig / SaveConfiguration / LoadConfiguration
--- - Simple Toggle widget implementation (implements GetValue / SetValue)
--- - Defensive layout using UIListLayout / LayoutOrder (avoids manual Positioning)
---
--- TODO: Add more widgets (Dropdown, Slider, ColorPicker) following the GetValue/SetValue contract.
+-- LuaUIX_Enhanced.lua
+-- Version 1.0.0
+-- Single-file UI library that recreates the look from the provided screenshot:
+-- - Left sidebar tabs with icons
+-- - Rounded main window, titlebar with minimize & close
+-- - Theme pill buttons at top
+-- - Scrollable content area with "cards" and toggles
+-- - API: CreateLib, NewTab, NewSection, NewToggle, NewButton
+-- Designed for exploit executors (uses CoreGui/PlayerGui fallback)
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 
-local LuaUIX = {}
-LuaUIX.__index = LuaUIX
+local Library = {}
+Library.__index = Library
 
--- ===== Metadata / defaults =====
-local VERSION = "1.0.0"
-
-local settings = settings or {}
-settings.Config = settings.Config or {
-    Enabled = false,
-    FolderName = "LuaUIXConfigs",
-    FileName = "default"
-}
-local DefaultToggle = DefaultToggle or Enum.KeyCode.RightShift
-
--- Minimal theme set (ensure common color keys exist)
-LuaUIX.Themes = {
+-- ====== Settings / Theme Colors (matching screenshot style) ======
+local Themes = {
     Dark = {
-        Primary = Color3.fromRGB(25,25,25),
-        Secondary = Color3.fromRGB(35,35,35),
-        Accent = Color3.fromRGB(76,201,240),
-        Text = Color3.fromRGB(230,230,230),
-        Success = Color3.fromRGB(46,204,113)
-    },
-    Light = {
-        Primary = Color3.fromRGB(240,240,240),
-        Secondary = Color3.fromRGB(255,255,255),
-        Accent = Color3.fromRGB(0,120,215),
-        Text = Color3.fromRGB(20,20,20),
-        Success = Color3.fromRGB(46,204,113)
+        Background = Color3.fromRGB(27, 28, 37),
+        Window = Color3.fromRGB(26, 28, 37),
+        Sidebar = Color3.fromRGB(22, 24, 33),
+        Card = Color3.fromRGB(34,36,48),
+        Accent = Color3.fromRGB(56,172,212),
+        Accent2 = Color3.fromRGB(147,51,158),
+        Text = Color3.fromRGB(220,224,230),
+        Muted = Color3.fromRGB(151,158,170),
+        Soft = Color3.fromRGB(36,40,50),
+        Highlight = Color3.fromRGB(66, 142, 165)
     }
 }
+local DefaultTheme = "Dark"
 
--- ===== Utilities =====
-local function try(call)
-    local ok, res = pcall(call)
-    return ok, res
-end
-
-local function safeWrite(path, data)
-    -- tries multiple common executor write functions
-    local ok, err = pcall(function() writefile(path, data) end)
-    if ok then return true end
-    -- alternative names some executors provide
-    pcall(function() if write_file then write_file(path, data) end end)
-    pcall(function() if writeFile then writeFile(path, data) end end)
-    if not ok then
-        warn(("LuaUIX: writefile failed: %s"):format(tostring(err)))
-    end
-    return ok
-end
-
-local function safeRead(path)
-    local ok, content = pcall(function() return readfile(path) end)
-    if ok then return content end
-    local altOk, altContent = pcall(function() if read_file then return read_file(path) end end)
-    if altOk and altContent then return altContent end
-    pcall(function() if readFile then return readFile(path) end end)
-    return nil
-end
-
-local function makePath(folder, filename)
-    folder = folder or (settings and settings.Config and settings.Config.FolderName) or "LuaUIXConfigs"
-    filename = filename or (settings and settings.Config and settings.Config.FileName) or "default"
-    return folder .. "/" .. filename .. ".json"
-end
-
-local function ShowNotification(text)
-    text = tostring(text or "")
-    pcall(function()
-        if StarterGui and StarterGui.SetCore then
-            StarterGui:SetCore("SendNotification", {
-                Title = "LuaUIX",
-                Text = text,
-                Duration = 3
-            })
-        end
-    end)
-    warn("[LuaUIX] " .. text)
-end
-
-local function getGuiParent()
+-- ====== Utility helpers ======
+local function safeParent(gui)
     local ok, core = pcall(function() return game:GetService("CoreGui") end)
     if ok and core then
-        -- some executors block CoreGui, but we try; fall back to PlayerGui otherwise
-        return core
+        pcall(function() gui.Parent = core end)
+        if gui.Parent then return true end
     end
-    local localPlayer = Players.LocalPlayer
-    if localPlayer then
-        return localPlayer:WaitForChild("PlayerGui")
+    local lp = Players.LocalPlayer
+    if not lp then
+        lp = Players.PlayerAdded:Wait()
     end
-    return nil
+    local pg = lp:WaitForChild("PlayerGui")
+    pcall(function() gui.Parent = pg end)
+    return gui.Parent ~= nil
 end
 
--- element pooling (small safety)
-local elementPool = {}
-function LuaUIX:GetFromPool(kind, createFn)
-    kind = kind or "Default"
-    elementPool[kind] = elementPool[kind] or {}
-    if #elementPool[kind] > 0 then
-        return table.remove(elementPool[kind])
-    else
-        return createFn()
-    end
-end
-function LuaUIX:ReturnToPool(kind, element)
-    if not element then return end
-    element.Parent = nil
-    element.Visible = false
-    elementPool[kind] = elementPool[kind] or {}
-    table.insert(elementPool[kind], element)
-end
-
--- ===== Window factory =====
-function LuaUIX:CreateWindow(title, opts)
-    opts = opts or {}
-    local themeName = opts.Theme or "Dark"
-    local theme = self.Themes[themeName] or self.Themes.Dark
-
-    local window = {}
-    window.Title = title or "LuaUIX Window"
-    window.Elements = {}          -- flag -> widget
-    window.ConfigurationSaving = (opts.ConfigurationSaving == nil) and false or opts.ConfigurationSaving
-    window.ConfigFolder = opts.ConfigFolder or settings.Config.FolderName
-    window.FileName = opts.FileName or settings.Config.FileName
-    window.Theme = theme
-    setmetatable(window, {__index = LuaUIX})
-
-    -- create ScreenGui parent safely
-    local guiParent = getGuiParent()
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "LuaUIX_ScreenGui_" .. tostring(math.random(1000,9999))
-    ScreenGui.ResetOnSpawn = false
-    if guiParent then
-        pcall(function() ScreenGui.Parent = guiParent end)
-    end
-
-    -- window main frame
-    local WindowFrame = Instance.new("Frame")
-    WindowFrame.Name = "Window"
-    WindowFrame.Size = UDim2.new(0, 520, 0, 640)
-    WindowFrame.Position = UDim2.new(0.5, -260, 0.5, -320)
-    WindowFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    WindowFrame.BackgroundColor3 = theme.Primary
-    WindowFrame.BorderSizePixel = 0
-    WindowFrame.Parent = ScreenGui
-
-    -- titlebar + controls
-    local TitleBar = Instance.new("Frame")
-    TitleBar.Name = "TitleBar"
-    TitleBar.Size = UDim2.new(1, 0, 0, 36)
-    TitleBar.Position = UDim2.new(0, 0, 0, 0)
-    TitleBar.BackgroundColor3 = theme.Secondary
-    TitleBar.BorderSizePixel = 0
-    TitleBar.Parent = WindowFrame
-
-    local TitleText = Instance.new("TextLabel")
-    TitleText.Name = "TitleText"
-    TitleText.Size = UDim2.new(1, -80, 1, 0)
-    TitleText.Position = UDim2.new(0, 12, 0, 0)
-    TitleText.BackgroundTransparency = 1
-    TitleText.Text = window.Title
-    TitleText.Font = Enum.Font.GothamBold
-    TitleText.TextSize = 16
-    TitleText.TextColor3 = theme.Text
-    TitleText.TextXAlignment = Enum.TextXAlignment.Left
-    TitleText.Parent = TitleBar
-
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Name = "CloseBtn"
-    CloseBtn.Size = UDim2.new(0, 56, 1, 0)
-    CloseBtn.Position = UDim2.new(1, -56, 0, 0)
-    CloseBtn.AnchorPoint = Vector2.new(1, 0)
-    CloseBtn.BackgroundColor3 = theme.Secondary
-    CloseBtn.BorderSizePixel = 0
-    CloseBtn.Font = Enum.Font.Gotham
-    CloseBtn.TextSize = 14
-    CloseBtn.Text = "Close"
-    CloseBtn.TextColor3 = theme.Text
-    CloseBtn.Parent = TitleBar
-
-    CloseBtn.MouseButton1Click:Connect(function()
-        -- destroy GUI
-        pcall(function() ScreenGui:Destroy() end)
-    end)
-
-    -- left tabs (UIListLayout)
-    local TabHolder = Instance.new("Frame")
-    TabHolder.Name = "TabHolder"
-    TabHolder.Size = UDim2.new(0, 160, 1, -36)
-    TabHolder.Position = UDim2.new(0, 0, 0, 36)
-    TabHolder.BackgroundTransparency = 1
-    TabHolder.Parent = WindowFrame
-
-    local TabList = Instance.new("UIListLayout")
-    TabList.SortOrder = Enum.SortOrder.LayoutOrder
-    TabList.Padding = UDim.new(0, 8)
-    TabList.Parent = TabHolder
-
-    -- right content area
-    local ContentArea = Instance.new("Frame")
-    ContentArea.Name = "ContentArea"
-    ContentArea.Size = UDim2.new(1, -160, 1, -36)
-    ContentArea.Position = UDim2.new(0, 160, 0, 36)
-    ContentArea.BackgroundTransparency = 1
-    ContentArea.Parent = WindowFrame
-
-    -- internal storage
-    window._tabs = {}
-    window._ui = {
-        ScreenGui = ScreenGui,
-        WindowFrame = WindowFrame,
-        TabHolder = TabHolder,
-        ContentArea = ContentArea
-    }
-
-    -- RegisterFlag (so Save/Load map flags to widget objects)
-    function window:RegisterFlag(flag, element)
-        if not flag or flag == "" then return end
-        self.Elements[flag] = element
-        element._flag = flag
-    end
-
-    -- Collect config from registered elements (calls GetValue)
-    function window:CollectConfig()
-        local out = {}
-        for flag, element in pairs(self.Elements) do
-            if type(element.GetValue) == "function" then
-                local ok, val = pcall(function() return element:GetValue() end)
-                if ok then out[flag] = val end
-            end
-        end
-        return out
-    end
-
-    function window:SaveConfiguration()
-        if not self.ConfigurationSaving then return false, "disabled" end
-        local ok, encoded = pcall(function() return HttpService:JSONEncode(self:CollectConfig()) end)
-        if not ok then return false, "encode_failed" end
-        local path = makePath(self.ConfigFolder, self.FileName)
-        local wrote = safeWrite(path, encoded)
-        if wrote then ShowNotification("Configuration saved.") end
-        return wrote
-    end
-
-    function window:LoadConfiguration()
-        local path = makePath(self.ConfigFolder, self.FileName)
-        local raw = safeRead(path)
-        if not raw then
-            warn("LuaUIX: no config file at " .. tostring(path))
-            return false, "no_file"
-        end
-        local ok, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-        if not ok then return false, "decode_failed" end
-        for flag, val in pairs(decoded) do
-            local element = self.Elements[flag]
-            if element and type(element.SetValue) == "function" then
-                pcall(function() element:SetValue(val) end)
+local function new(class, props)
+    local inst = Instance.new(class)
+    if props then
+        for k,v in pairs(props) do
+            if k == "Parent" then
+                inst.Parent = v
             else
-                warn(("LuaUIX: element for flag '%s' not found during LoadConfiguration"):format(tostring(flag)))
+                pcall(function() inst[k] = v end)
             end
         end
-        ShowNotification("Configuration loaded.")
-        return true
+    end
+    return inst
+end
+
+local function applyTextStyle(lbl, size, bold)
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = size or 14
+    lbl.TextColor3 = Themes[DefaultTheme].Text
+    lbl.BackgroundTransparency = 1
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    if bold then lbl.Font = Enum.Font.GothamBold end
+end
+
+-- Rounded shadow helper
+local function addRounded(frame, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 12)
+    corner.Parent = frame
+    return corner
+end
+
+-- ====== Library API ======
+-- Create base library/window
+function Library.CreateLib(title, options)
+    options = options or {}
+    local themeName = options.Theme or DefaultTheme
+    local theme = Themes[themeName] or Themes[DefaultTheme]
+
+    local self = setmetatable({}, Library)
+    self.Theme = theme
+    self.Title = title or "LuaUIX Enhanced"
+    self.Tabs = {}
+
+    -- ScreenGui
+    local screen = new("ScreenGui", {Name = "LuaUIX_Enhanced_ScreenGui", ResetOnSpawn = false})
+    safeParent(screen)
+    self.ScreenGui = screen
+
+    -- root frame (centered)
+    local root = new("Frame", {
+        Name = "Root",
+        Size = UDim2.new(0, 760, 0, 720),
+        Position = UDim2.new(0.5, -380, 0.5, -360),
+        AnchorPoint = Vector2.new(0.5,0.5),
+        BackgroundColor3 = theme.Window,
+        BorderSizePixel = 0,
+        Parent = screen
+    })
+    addRounded(root, 14)
+
+    -- subtle outer shadow (using UIStroke and a darker border)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(10,10,15)
+    stroke.Thickness = 1
+    stroke.Parent = root
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    -- Titlebar
+    local titlebar = new("Frame", {
+        Name = "Titlebar",
+        Size = UDim2.new(1, 0, 0, 56),
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = Color3.fromRGB(33, 34, 44),
+        Parent = root
+    })
+    addRounded(titlebar, 12)
+
+    local titleText = new("TextLabel", {
+        Name = "TitleText",
+        Size = UDim2.new(0.7, 0, 1, 0),
+        Position = UDim2.new(0, 18, 0, 0),
+        BackgroundTransparency = 1,
+        Text = " " .. self.Title .. " - v19.1",
+        Parent = titlebar
+    })
+    applyTextStyle(titleText, 18, true)
+    titleText.TextColor3 = theme.Text
+
+    -- Minimize + Close buttons (styled)
+    local btnClose = new("TextButton", {
+        Name = "CloseBtn",
+        Size = UDim2.new(0, 44, 0, 30),
+        Position = UDim2.new(1, -58, 0, 12),
+        AnchorPoint = Vector2.new(0,0),
+        BackgroundColor3 = Color3.fromRGB(226, 86, 96),
+        Text = "✕",
+        Font = Enum.Font.GothamBold,
+        TextSize = 16,
+        TextColor3 = Color3.fromRGB(255,255,255),
+        Parent = titlebar
+    })
+    addRounded(btnClose, 8)
+
+    local btnMin = new("TextButton", {
+        Name = "MinBtn",
+        Size = UDim2.new(0, 44, 0, 30),
+        Position = UDim2.new(1, -110, 0, 12),
+        AnchorPoint = Vector2.new(0,0),
+        BackgroundColor3 = Color3.fromRGB(229, 105, 97),
+        Text = "–",
+        Font = Enum.Font.GothamBold,
+        TextSize = 18,
+        TextColor3 = Color3.fromRGB(255,255,255),
+        Parent = titlebar
+    })
+    addRounded(btnMin, 8)
+
+    -- left sidebar
+    local sidebar = new("Frame", {
+        Name = "Sidebar",
+        Size = UDim2.new(0, 180, 1, -56),
+        Position = UDim2.new(0, 0, 0, 56),
+        BackgroundColor3 = theme.Sidebar,
+        BorderSizePixel = 0,
+        Parent = root
+    })
+    addRounded(sidebar, 12)
+
+    -- left bar inner padding and list
+    local sideList = new("Frame", {
+        Name = "SideList",
+        Size = UDim2.new(1, -18, 1, -30),
+        Position = UDim2.new(0, 12, 0, 12),
+        BackgroundTransparency = 1,
+        Parent = sidebar
+    })
+
+    local sideLayout = new("UIListLayout", {Parent = sideList})
+    sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    sideLayout.Padding = UDim.new(0, 12)
+
+    -- function to create a tab button in sidebar
+    local function makeTabButton(text, icon)
+        local container = new("TextButton", {
+            Size = UDim2.new(1, 0, 0, 56),
+            BackgroundColor3 = Color3.fromRGB(42,46,59),
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            Parent = sideList
+        })
+        addRounded(container, 10)
+
+        local iconLbl = new("TextLabel", {
+            Size = UDim2.new(0, 32, 0, 32),
+            Position = UDim2.new(0, 12, 0, 12),
+            BackgroundTransparency = 1,
+            Text = icon or "◼",
+            Parent = container
+        })
+        iconLbl.Font = Enum.Font.Gotham
+        iconLbl.TextSize = 18
+        iconLbl.TextColor3 = theme.Accent
+
+        local label = new("TextLabel", {
+            Size = UDim2.new(1, -64, 1, 0),
+            Position = UDim2.new(0, 56, 0, 0),
+            BackgroundTransparency = 1,
+            Text = text or "Tab",
+            Parent = container
+        })
+        applyTextStyle(label, 15, true)
+        label.TextColor3 = theme.Text
+
+        return container
     end
 
-    -- AddTab: creates a tab button (uses LayoutOrder) and a content frame
-    function window:AddTab(name, icon)
-        local tab = {}
-        tab.Name = name or "Tab"
-        tab.Icon = icon
-        tab._widgets = {}
-        tab._content = Instance.new("Frame")
-        tab._content.Name = name .. "_Content"
-        tab._content.Size = UDim2.new(1, 0, 1, 0)
-        tab._content.BackgroundTransparency = 1
-        tab._content.Visible = false
-        tab._content.Parent = ContentArea
+    -- create a content area on the right
+    local contentArea = new("Frame", {
+        Name = "ContentArea",
+        Size = UDim2.new(1, -200, 1, -56),
+        Position = UDim2.new(0, 200, 0, 56),
+        BackgroundTransparency = 1,
+        Parent = root
+    })
 
-        local btn = Instance.new("TextButton")
-        btn.Name = name .. "_Btn"
-        btn.Size = UDim2.new(1, -12, 0, 42)
-        btn.BackgroundColor3 = theme.Secondary
-        btn.BorderSizePixel = 0
-        btn.Font = Enum.Font.Gotham
-        btn.TextSize = 14
-        btn.Text = (icon and (icon .. "  ") or "") .. name
-        btn.TextColor3 = theme.Text
-        btn.TextXAlignment = Enum.TextXAlignment.Left
-        -- ensure LayoutOrder is appropriate; UIListLayout includes non-button children so we keep it safe
-        btn.LayoutOrder = (#TabHolder:GetChildren() or 0) + 1
-        btn.Parent = TabHolder
+    -- top-right area (theme pills)
+    local topRight = new("Frame", {
+        Name = "TopRight",
+        Size = UDim2.new(1, -200, 0, 96),
+        Position = UDim2.new(0, 200, 0, 8),
+        BackgroundTransparency = 1,
+        Parent = root
+    })
 
-        btn.MouseButton1Click:Connect(function()
-            for _, t in pairs(window._tabs) do
-                if t._content then t._content.Visible = false end
-                if t._btn then t._btn.BackgroundColor3 = theme.Secondary end
-            end
-            tab._content.Visible = true
-            btn.BackgroundColor3 = theme.Accent
+    -- holder for theme pills
+    local pillHolder = new("Frame", {
+        Name = "PillHolder",
+        Size = UDim2.new(0.6, 0, 1, 0),
+        Position = UDim2.new(0, 24, 0, 10),
+        BackgroundTransparency = 1,
+        Parent = topRight
+    })
+
+    local pillLayout = Instance.new("UIListLayout", pillHolder)
+    pillLayout.FillDirection = Enum.FillDirection.Horizontal
+    pillLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pillLayout.Padding = UDim.new(0, 14)
+
+    local function makePill(text, bg, textColor)
+        local p = new("TextButton", {
+            Size = UDim2.new(0, 120, 0, 40),
+            BackgroundColor3 = bg,
+            Text = text,
+            AutoButtonColor = false,
+            Parent = pillHolder
+        })
+        local c = addRounded(p, 10)
+        p.Font = Enum.Font.GothamBold
+        p.TextSize = 14
+        p.TextColor3 = textColor or theme.Text
+        return p
+    end
+
+    -- add sample pills (Dark, Light, Midnight, Custom)
+    local pillDark = makePill("Dark", theme.Soft, theme.Text)
+    local pillLight = makePill("Light", Color3.fromRGB(250,250,250), Color3.fromRGB(24,24,24))
+    local pillMidnight = makePill("Midnight", Color3.fromRGB(10,10,20), Color3.fromRGB(180,200,220))
+    local pillCustom = makePill("Custom", theme.Accent2, Color3.fromRGB(255,220,80))
+
+    -- Scrollable container for the main content on the right
+    local scrollFrame = new("ScrollingFrame", {
+        Name = "MainScroll",
+        Size = UDim2.new(1, -28, 1, -120),
+        Position = UDim2.new(0, 12, 0, 120),
+        BackgroundTransparency = 1,
+        ScrollBarThickness = 8,
+        Parent = contentArea
+    })
+    local canvas = Instance.new("UIListLayout", scrollFrame)
+    canvas.SortOrder = Enum.SortOrder.LayoutOrder
+    canvas.Padding = UDim.new(0, 18)
+
+    -- style the scrollbar minimally
+    local uiStroke = Instance.new("UIStroke", root)
+    uiStroke.Thickness = 0.7
+    uiStroke.Color = Color3.fromRGB(18,18,24)
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    -- helper to create a "card" (rounded panel with title and body)
+    local function makeCard(title, bodyText)
+        local card = new("Frame", {
+            Size = UDim2.new(1, -24, 0, 160),
+            BackgroundColor3 = theme.Card,
+            BorderSizePixel = 0,
+            Parent = scrollFrame
+        })
+        addRounded(card, 12)
+
+        local header = new("TextLabel", {
+            Size = UDim2.new(1, -24, 0, 36),
+            Position = UDim2.new(0, 12, 0, 12),
+            BackgroundTransparency = 1,
+            Text = title,
+            Parent = card
+        })
+        applyTextStyle(header, 16, true)
+        header.TextColor3 = theme.Accent
+
+        local body = new("TextLabel", {
+            Size = UDim2.new(1, -36, 0, 84),
+            Position = UDim2.new(0, 12, 0, 48),
+            BackgroundTransparency = 1,
+            Text = bodyText or "",
+            TextWrapped = true,
+            Parent = card
+        })
+        applyTextStyle(body, 14, false)
+        body.TextColor3 = theme.Muted
+
+        return card
+    end
+
+    -- toggle widget creator (stylish pill)
+    local function createToggle(parent, default)
+        local current = default and true or false
+        local container = new("Frame", {
+            Size = UDim2.new(0, 96, 0, 36),
+            BackgroundTransparency = 1,
+            Parent = parent
+        })
+        local pill = new("TextButton", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = current and theme.Accent or theme.Soft,
+            Text = (current and "On" or "Off"),
+            AutoButtonColor = false,
+            Parent = container
+        })
+        addRounded(pill, 18)
+        pill.Font = Enum.Font.GothamBold
+        pill.TextSize = 14
+        pill.TextColor3 = Color3.fromRGB(250,250,250)
+
+        function container:GetValue()
+            return current
+        end
+        function container:SetValue(v)
+            current = not not v
+            pill.BackgroundColor3 = current and theme.Accent or theme.Soft
+            pill.Text = current and "On" or "Off"
+        end
+
+        pill.MouseButton1Click:Connect(function()
+            container:SetValue(not current)
         end)
 
-        -- open the first tab by default
-        if #window._tabs == 0 then
-            btn.BackgroundColor3 = theme.Accent
-            tab._content.Visible = true
-        end
-
-        tab._btn = btn
-
-        -- section factory inside tab
-        function tab:CreateSection(title, side)
-            side = side or "Left"
-            local section = {}
-            section.Title = title or "Section"
-            section._frame = Instance.new("Frame")
-            section._frame.Name = ("Section_%s"):format(title)
-            section._frame.Size = UDim2.new(1, -24, 0, 160)
-            -- position uses GetChildren() count: safe but simple (you may replace with proper layout)
-            section._frame.Position = UDim2.new(0, 12, 0, (#tab._content:GetChildren() - 1) * 166)
-            section._frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-            section._frame.BackgroundTransparency = 0.85
-            section._frame.BorderSizePixel = 0
-            section._frame.Parent = tab._content
-
-            local label = Instance.new("TextLabel")
-            label.Size = UDim2.new(1, -12, 0, 28)
-            label.Position = UDim2.new(0, 6, 0, 6)
-            label.BackgroundTransparency = 1
-            label.Text = section.Title
-            label.Font = Enum.Font.GothamSemibold
-            label.TextSize = 14
-            label.TextColor3 = theme.Text
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = section._frame
-
-            -- AddToggle: simple toggle widget (implements GetValue & SetValue)
-            function section:AddToggle(flag, default, callback)
-                local widget = {}
-                widget._value = not not default
-
-                local container = Instance.new("Frame")
-                container.Size = UDim2.new(1, -12, 0, 36)
-                container.Position = UDim2.new(0, 6, 0, 36 + (#section._frame:GetChildren() - 1) * 40)
-                container.BackgroundTransparency = 1
-                container.Parent = section._frame
-
-                local lbl = Instance.new("TextLabel")
-                lbl.Size = UDim2.new(0.6, 0, 1, 0)
-                lbl.BackgroundTransparency = 1
-                lbl.Text = flag or "Toggle"
-                lbl.Font = Enum.Font.Gotham
-                lbl.TextSize = 14
-                lbl.TextColor3 = theme.Text
-                lbl.TextXAlignment = Enum.TextXAlignment.Left
-                lbl.Parent = container
-
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(0, 80, 0, 28)
-                btn.Position = UDim2.new(1, -84, 0, 4)
-                btn.AnchorPoint = Vector2.new(1, 0)
-                btn.BackgroundColor3 = widget._value and theme.Accent or theme.Secondary
-                btn.BorderSizePixel = 0
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 14
-                btn.Text = widget._value and "On" or "Off"
-                btn.TextColor3 = theme.Text
-                btn.Parent = container
-
-                function widget:GetValue() return widget._value end
-                function widget:SetValue(v)
-                    widget._value = not not v
-                    btn.Text = widget._value and "On" or "Off"
-                    btn.BackgroundColor3 = widget._value and theme.Accent or theme.Secondary
-                end
-
-                btn.MouseButton1Click:Connect(function()
-                    widget:SetValue(not widget._value)
-                    if type(callback) == "function" then
-                        pcall(function() callback(widget._value) end)
-                    end
-                end)
-
-                -- auto-register flag if provided
-                if flag and flag ~= "" then
-                    -- ensure parent window exists
-                    window:RegisterFlag(flag, widget)
-                end
-
-                table.insert(tab._widgets, widget)
-                return widget
-            end
-
-            section.ParentWindow = window
-            section._frame.Parent = tab._content
-            return section
-        end
-
-        table.insert(window._tabs, tab)
-        return tab
+        return container
     end
 
-    return window
+    -- Public API functions for building UI (Tab / Section / Widgets)
+    function self:NewTab(name, icon)
+        local tabBtn = makeTabButton(name, icon)
+        local contentFrame = Instance.new("Frame")
+        contentFrame.Name = name .. "_Content"
+        contentFrame.Size = UDim2.new(1, -28, 1, -0)
+        contentFrame.Position = UDim2.new(0, 12, 0, 0)
+        contentFrame.BackgroundTransparency = 1
+        contentFrame.Visible = false
+        contentFrame.Parent = contentArea
+
+        -- keep content scrollable separate
+        -- create inner scroll for tab content
+        local innerScroll = Instance.new("ScrollingFrame", contentFrame)
+        innerScroll.Name = "Scroll"
+        innerScroll.Size = UDim2.new(1, -12, 1, -12)
+        innerScroll.Position = UDim2.new(0, 6, 0, 6)
+        innerScroll.BackgroundTransparency = 1
+        innerScroll.ScrollBarThickness = 8
+
+        local list = Instance.new("UIListLayout", innerScroll)
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Padding = UDim.new(0, 18)
+
+        -- Tab object to return
+        local tabObj = {}
+        tabObj.Name = name
+        tabObj.Button = tabBtn
+        tabObj.Content = innerScroll
+        tabObj.Sections = {}
+
+        -- clicking tab: hide others, show this
+        tabBtn.MouseButton1Click:Connect(function()
+            for _, t in pairs(self.Tabs) do
+                t.Button.BackgroundColor3 = Color3.fromRGB(42,46,59)
+                t.Content.Visible = false
+            end
+            tabBtn.BackgroundColor3 = Color3.fromRGB(30,36,55)
+            innerScroll.Visible = true
+        end)
+
+        -- if first tab, open
+        if #self.Tabs == 0 then
+            tabBtn.BackgroundColor3 = Color3.fromRGB(30,36,55)
+            innerScroll.Visible = true
+        end
+
+        function tabObj:NewSection(title)
+            local sectionFrame = Instance.new("Frame", innerScroll)
+            sectionFrame.Size = UDim2.new(1, -24, 0, 160)
+            sectionFrame.BackgroundColor3 = Color3.fromRGB(23,25,34)
+            sectionFrame.BorderSizePixel = 0
+            addRounded(sectionFrame, 12)
+
+            local header = new("TextLabel", {
+                Text = title or "Section",
+                BackgroundTransparency = 1,
+                Parent = sectionFrame
+            })
+            header.Size = UDim2.new(1, -24, 0, 30)
+            header.Position = UDim2.new(0, 12, 0, 8)
+            applyTextStyle(header, 16, true)
+            header.TextColor3 = theme.Highlight
+
+            -- Inner container for controls
+            local inner = Instance.new("Frame", sectionFrame)
+            inner.Size = UDim2.new(1, -24, 1, -48)
+            inner.Position = UDim2.new(0, 12, 0, 44)
+            inner.BackgroundTransparency = 1
+
+            local secObj = {Frame = sectionFrame, Inner = inner, Widgets = {}}
+
+            function secObj:NewToggle(text, default, callback)
+                local row = Instance.new("Frame", inner)
+                row.Size = UDim2.new(1, 0, 0, 36)
+                row.BackgroundTransparency = 1
+
+                local lbl = new("TextLabel", {
+                    Text = text or "Toggle",
+                    Size = UDim2.new(0.7, 0, 1, 0),
+                    Position = UDim2.new(0, 6, 0, 0),
+                    Parent = row
+                })
+                applyTextStyle(lbl, 14, false)
+                lbl.TextColor3 = theme.Text
+
+                local toggle = createToggle(row, default)
+                toggle:SetValue(default)
+                toggleFrame = toggle
+                toggle.Parent = row
+                toggle.Position = UDim2.new(1, -110, 0, 2)
+                toggle.AnchorPoint = Vector2.new(1,0)
+
+                if callback then
+                    -- connect to value changes by wrapping SetValue (non-intrusive)
+                    local oldSet = toggle.SetValue
+                    function toggle:SetValue(v)
+                        oldSet(self, v)
+                        pcall(function() callback(v) end)
+                    end
+                end
+
+                table.insert(secObj.Widgets, toggle)
+                return toggle
+            end
+
+            function secObj:NewButton(text, callback)
+                local btn = new("TextButton", {
+                    Text = text or "Button",
+                    Size = UDim2.new(0.45, 0, 0, 36),
+                    BackgroundColor3 = theme.Highlight,
+                    BorderSizePixel = 0,
+                    Parent = inner
+                })
+                addRounded(btn, 8)
+                btn.Font = Enum.Font.GothamBold
+                btn.TextSize = 14
+                btn.TextColor3 = Color3.fromRGB(255,255,255)
+                btn.MouseButton1Click:Connect(function()
+                    pcall(function() callback() end)
+                end)
+                table.insert(secObj.Widgets, btn)
+                return btn
+            end
+
+            table.insert(self.Tabs, tabObj)
+            table.insert(tabObj.Sections, secObj)
+            return secObj
+        end
+
+        table.insert(self.Tabs, tabObj)
+        return tabObj
+    end
+
+    -- theme pill interactions (basic)
+    pillDark.MouseButton1Click:Connect(function()
+        -- no-op; it's the default look
+    end)
+    pillLight.MouseButton1Click:Connect(function()
+        -- quick fake "light" override (not full re-theme)
+        root.BackgroundColor3 = Color3.fromRGB(246,246,246)
+        titlebar.BackgroundColor3 = Color3.fromRGB(246,246,246)
+    end)
+
+    -- close/minimize behavior
+    btnClose.MouseButton1Click:Connect(function()
+        pcall(function() screen:Destroy() end)
+    end)
+    local minimized = false
+    btnMin.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            -- collapse content area
+            contentArea.Visible = false
+            sidebar.Visible = false
+            titlebar.Size = UDim2.new(1, 0, 0, 56)
+            root.Size = UDim2.new(0, 360, 0, 84)
+        else
+            contentArea.Visible = true
+            sidebar.Visible = true
+            titlebar.Size = UDim2.new(1, 0, 0, 56)
+            root.Size = UDim2.new(0, 760, 0, 720)
+        end
+    end)
+
+    -- minimal drag for window (click+drag titlebar)
+    do
+        local dragging = false
+        local dragStart = nil
+        local startPos = nil
+        titlebar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = root.Position
+            end
+        end)
+        titlebar.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        game:GetService("UserInputService").InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local delta = input.Position - dragStart
+                root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    -- expose some internals for further customization
+    self.ScreenGui = screen
+    self.Root = root
+    self.Sidebar = sidebar
+    self.ContentArea = contentArea
+
+    return self
 end
 
--- convenience global API
-function LuaUIX.Create(title, opts)
-    return LuaUIX:CreateWindow(title, opts)
-end
-
-return LuaUIX
+return Library
