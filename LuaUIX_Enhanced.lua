@@ -1,5 +1,5 @@
--- LuaUIX Library v1.0
--- A comprehensive UI library for Roblox exploits
+-- LuaUIX Library v1.5
+-- Enhanced UI library for Roblox exploits
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
@@ -8,6 +8,7 @@ LuaUIX.__index = LuaUIX
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- Utility functions
 local function createInstance(className, properties)
@@ -17,6 +18,23 @@ local function createInstance(className, properties)
     end
     return instance
 end
+
+-- Color palette
+local colors = {
+    background = Color3.fromRGB(33, 34, 44),
+    titlebar = Color3.fromRGB(46, 46, 66),
+    sidebar = Color3.fromRGB(27, 28, 37),
+    content = Color3.fromRGB(40, 42, 54),
+    section = Color3.fromRGB(23, 25, 34),
+    accent = Color3.fromRGB(56, 172, 212),
+    button = Color3.fromRGB(90, 120, 255),
+    toggleOff = Color3.fromRGB(42, 46, 59),
+    text = Color3.fromRGB(255, 255, 255),
+    textSecondary = Color3.fromRGB(200, 200, 200),
+    success = Color3.fromRGB(76, 175, 80),
+    warning = Color3.fromRGB(255, 193, 7),
+    error = Color3.fromRGB(244, 67, 54)
+}
 
 -- Library initialization
 function LuaUIX.new(menuName)
@@ -39,7 +57,7 @@ function LuaUIX.new(menuName)
         Name = "MainWindow",
         Size = UDim2.new(0, 650, 0, 500),
         Position = UDim2.new(0.5, -325, 0.5, -250),
-        BackgroundColor3 = Color3.fromRGB(33, 34, 44),
+        BackgroundColor3 = colors.background,
         Parent = self.gui
     })
     
@@ -52,7 +70,7 @@ function LuaUIX.new(menuName)
     self.titlebar = createInstance("Frame", {
         Name = "Titlebar",
         Size = UDim2.new(1, 0, 0, 40),
-        BackgroundColor3 = Color3.fromRGB(46, 46, 66),
+        BackgroundColor3 = colors.titlebar,
         Parent = self.window
     })
     
@@ -69,7 +87,7 @@ function LuaUIX.new(menuName)
         Text = menuName or "LuaUIX Window",
         Font = Enum.Font.GothamBold,
         TextSize = 16,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = self.titlebar
     })
@@ -79,7 +97,7 @@ function LuaUIX.new(menuName)
         Name = "Sidebar",
         Size = UDim2.new(0, 150, 1, -40),
         Position = UDim2.new(0, 0, 0, 40),
-        BackgroundColor3 = Color3.fromRGB(27, 28, 37),
+        BackgroundColor3 = colors.sidebar,
         Parent = self.window
     })
     
@@ -93,7 +111,7 @@ function LuaUIX.new(menuName)
         Name = "Content",
         Size = UDim2.new(1, -150, 1, -40),
         Position = UDim2.new(0, 150, 0, 40),
-        BackgroundColor3 = Color3.fromRGB(40, 42, 54),
+        BackgroundColor3 = colors.content,
         Parent = self.window
     })
     
@@ -105,9 +123,13 @@ function LuaUIX.new(menuName)
     -- Initialize pages table
     self.pages = {}
     self.currentPage = nil
+    self.tabButtons = {}
     
     -- Add draggable functionality
     self:draggable(self.titlebar)
+    
+    -- Add keybind to toggle UI
+    self:setupToggleKeybind()
     
     return self
 end
@@ -148,15 +170,26 @@ function LuaUIX:draggable(frame)
     end)
 end
 
+-- Setup UI toggle keybind
+function LuaUIX:setupToggleKeybind()
+    local toggleKey = Enum.KeyCode.RightShift
+    
+    UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == toggleKey then
+            self:ToggleVisibility()
+        end
+    end)
+end
+
 -- Create a new page
-function LuaUIX:CreatePage(name)
+function LuaUIX:CreatePage(name, icon)
     local page = createInstance("ScrollingFrame", {
         Name = name,
         Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
         Visible = false,
         ScrollBarThickness = 6,
-        ScrollBarImageColor3 = Color3.fromRGB(56, 172, 212),
+        ScrollBarImageColor3 = colors.accent,
         Parent = self.content
     })
     
@@ -185,11 +218,11 @@ function LuaUIX:CreatePage(name)
         Name = name .. "Tab",
         Size = UDim2.new(1, -20, 0, 40),
         Position = UDim2.new(0, 10, 0, 10 + (tabCount - 1) * 50),
-        BackgroundColor3 = Color3.fromRGB(42, 46, 59),
-        Text = name,
+        BackgroundColor3 = colors.toggleOff,
+        Text = icon and (icon .. "  " .. name) or name,
         Font = Enum.Font.GothamBold,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         Parent = self.sidebar
     })
     
@@ -201,6 +234,8 @@ function LuaUIX:CreatePage(name)
     tabButton.MouseButton1Click:Connect(function()
         self:ShowPage(name)
     end)
+    
+    self.tabButtons[name] = tabButton
     
     -- Show first page by default
     if tabCount == 1 then
@@ -214,11 +249,17 @@ end
 function LuaUIX:ShowPage(name)
     if self.currentPage then
         self.currentPage.Visible = false
+        -- Reset tab button color
+        for pageName, button in pairs(self.tabButtons) do
+            button.BackgroundColor3 = colors.toggleOff
+        end
     end
     
     if self.pages[name] then
         self.pages[name].Visible = true
         self.currentPage = self.pages[name]
+        -- Highlight active tab
+        self.tabButtons[name].BackgroundColor3 = colors.accent
     end
 end
 
@@ -226,7 +267,7 @@ end
 function LuaUIX:CreateSection(parent, titleText)
     local section = createInstance("Frame", {
         Size = UDim2.new(1, -20, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(23, 25, 34),
+        BackgroundColor3 = colors.section,
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = parent
     })
@@ -256,7 +297,7 @@ function LuaUIX:CreateSection(parent, titleText)
         Text = titleText or "Section",
         Font = Enum.Font.GothamBold,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(200, 200, 200),
+        TextColor3 = colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = section
     })
@@ -268,11 +309,11 @@ end
 function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     local btn = createInstance("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = defaultValue and Color3.fromRGB(56, 172, 212) or Color3.fromRGB(42, 46, 59),
+        BackgroundColor3 = defaultValue and colors.accent or colors.toggleOff,
         Text = text or "Toggle",
         Font = Enum.Font.Gotham,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         AutoButtonColor = false,
         Parent = parent
     })
@@ -286,7 +327,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     
     btn.MouseButton1Click:Connect(function()
         state = not state
-        btn.BackgroundColor3 = state and Color3.fromRGB(56, 172, 212) or Color3.fromRGB(42, 46, 59)
+        btn.BackgroundColor3 = state and colors.accent or colors.toggleOff
         if callback then 
             callback(state) 
         end
@@ -295,7 +336,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     return {
         SetState = function(newState)
             state = newState
-            btn.BackgroundColor3 = state and Color3.fromRGB(56, 172, 212) or Color3.fromRGB(42, 46, 59)
+            btn.BackgroundColor3 = state and colors.accent or colors.toggleOff
         end,
         GetState = function()
             return state
@@ -304,14 +345,14 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
 end
 
 -- Create a button
-function LuaUIX:CreateButton(parent, text, callback)
+function LuaUIX:CreateButton(parent, text, callback, color)
     local btn = createInstance("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = Color3.fromRGB(90, 120, 255),
+        BackgroundColor3 = color or colors.button,
         Text = text or "Button",
         Font = Enum.Font.GothamBold,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         Parent = parent
     })
     
@@ -330,7 +371,7 @@ function LuaUIX:CreateButton(parent, text, callback)
 end
 
 -- Create a slider
-function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue)
+function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision)
     local frame = createInstance("Frame", {
         Size = UDim2.new(1, 0, 0, 50),
         BackgroundTransparency = 1,
@@ -343,7 +384,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue)
         Text = text .. ": " .. (defaultValue or min),
         Font = Enum.Font.Gotham,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(220, 220, 220),
+        TextColor3 = colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = frame
     })
@@ -363,7 +404,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue)
     
     local sliderFill = createInstance("Frame", {
         Size = UDim2.new(defaultValue and ((defaultValue - min) / (max - min)) or 0, 0, 1, 0),
-        BackgroundColor3 = Color3.fromRGB(56, 172, 212),
+        BackgroundColor3 = colors.accent,
         BorderSizePixel = 0,
         Parent = sliderBack
     })
@@ -375,6 +416,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue)
     
     local dragging = false
     local currentValue = defaultValue or min
+    local precision = precision or 0
     
     sliderBack.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -392,7 +434,13 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local rel = math.clamp((input.Position.X - sliderBack.AbsolutePosition.X) / sliderBack.AbsoluteSize.X, 0, 1)
             sliderFill.Size = UDim2.new(rel, 0, 1, 0)
-            currentValue = math.floor(min + (max - min) * rel)
+            
+            if precision > 0 then
+                currentValue = math.floor((min + (max - min) * rel) * 10^precision) / 10^precision
+            else
+                currentValue = math.floor(min + (max - min) * rel)
+            end
+            
             label.Text = text .. ": " .. currentValue
             if callback then 
                 callback(currentValue) 
@@ -417,7 +465,7 @@ end
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local frame = createInstance("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = Color3.fromRGB(42, 46, 59),
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
@@ -432,7 +480,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Text = text .. (defaultValue and (": " .. defaultValue) or " ▼"),
         Font = Enum.Font.Gotham,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         Parent = frame
     })
     
@@ -462,7 +510,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Text = opt,
             Font = Enum.Font.Gotham,
             TextSize = 14,
-            TextColor3 = Color3.fromRGB(220, 220, 220),
+            TextColor3 = colors.textSecondary,
             Parent = listFrame
         })
         
@@ -494,14 +542,14 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
 end
 
 -- Create a label
-function LuaUIX:CreateLabel(parent, text, textSize)
+function LuaUIX:CreateLabel(parent, text, textSize, color)
     local label = createInstance("TextLabel", {
         Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
         Text = text,
         Font = Enum.Font.Gotham,
         TextSize = textSize or 14,
-        TextColor3 = Color3.fromRGB(220, 220, 220),
+        TextColor3 = color or colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = parent
     })
@@ -513,7 +561,7 @@ end
 function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
     local frame = createInstance("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = Color3.fromRGB(42, 46, 59),
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
@@ -530,7 +578,7 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
         PlaceholderText = placeholder or "",
         Font = Enum.Font.Gotham,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextColor3 = colors.text,
         Parent = frame
     })
     
@@ -541,6 +589,148 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
     end)
     
     return textBox
+end
+
+-- Create a keybind
+function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
+    local frame = createInstance("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = colors.toggleOff,
+        Parent = parent
+    })
+    
+    createInstance("UICorner", {
+        CornerRadius = UDim.new(0, 6),
+        Parent = frame
+    })
+    
+    local label = createInstance("TextLabel", {
+        Size = UDim2.new(0.6, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = text,
+        Font = Enum.Font.Gotham,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = frame
+    })
+    
+    local keyLabel = createInstance("TextButton", {
+        Size = UDim2.new(0.4, -5, 1, -5),
+        Position = UDim2.new(0.6, 0, 0, 2.5),
+        BackgroundColor3 = colors.accent,
+        Text = defaultKey and defaultKey.Name or "NONE",
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        AutoButtonColor = false,
+        Parent = frame
+    })
+    
+    createInstance("UICorner", {
+        CornerRadius = UDim.new(0, 6),
+        Parent = keyLabel
+    })
+    
+    local listening = false
+    local currentKey = defaultKey
+    
+    keyLabel.MouseButton1Click:Connect(function()
+        listening = true
+        keyLabel.Text = "..."
+        keyLabel.BackgroundColor3 = colors.warning
+    end)
+    
+    local connection
+    connection = UserInputService.InputBegan:Connect(function(input)
+        if listening then
+            listening = false
+            currentKey = input.KeyCode
+            keyLabel.Text = currentKey.Name
+            keyLabel.BackgroundColor3 = colors.accent
+        end
+    end)
+    
+    if defaultKey and callback then
+        UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode == currentKey then
+                callback()
+            end
+        end)
+    end
+    
+    return {
+        SetKey = function(key)
+            currentKey = key
+            keyLabel.Text = key.Name
+        end,
+        GetKey = function()
+            return currentKey
+        end
+    }
+end
+
+-- Create a color picker
+function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
+    local frame = createInstance("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = colors.toggleOff,
+        Parent = parent
+    })
+    
+    createInstance("UICorner", {
+        CornerRadius = UDim.new(0, 6),
+        Parent = frame
+    })
+    
+    local label = createInstance("TextLabel", {
+        Size = UDim2.new(0.6, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = text,
+        Font = Enum.Font.Gotham,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = frame
+    })
+    
+    local colorBox = createInstance("TextButton", {
+        Size = UDim2.new(0.4, -5, 1, -5),
+        Position = UDim2.new(0.6, 0, 0, 2.5),
+        BackgroundColor3 = defaultColor or colors.accent,
+        Text = "",
+        AutoButtonColor = false,
+        Parent = frame
+    })
+    
+    createInstance("UICorner", {
+        CornerRadius = UDim.new(0, 6),
+        Parent = colorBox
+    })
+    
+    local currentColor = defaultColor or colors.accent
+    
+    colorBox.MouseButton1Click:Connect(function()
+        -- This would open a color picker dialog
+        -- For simplicity, we'll just cycle through some colors
+        local colors = {colors.accent, colors.button, colors.success, colors.warning, colors.error}
+        local nextColor = colors[(table.find(colors, currentColor) or 0) % #colors + 1]
+        currentColor = nextColor
+        colorBox.BackgroundColor3 = currentColor
+        if callback then
+            callback(currentColor)
+        end
+    end)
+    
+    return {
+        SetColor = function(color)
+            currentColor = color
+            colorBox.BackgroundColor3 = color
+        end,
+        GetColor = function()
+            return currentColor
+        end
+    }
 end
 
 -- Toggle UI visibility
