@@ -1,17 +1,16 @@
--- LuaUIX Library v2.0 - Fixed UI Toggle Function
--- Fixed and production-ready UI library for Roblox exploits
+-- LuaUIX Library v2.1 - Fixed Version
+-- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
 
 -- Services
 local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 -- Utility functions
-local function createInstance(className, properties)
+local function Create(className, properties)
     local instance = Instance.new(className)
     for property, value in pairs(properties) do
         instance[property] = value
@@ -46,14 +45,14 @@ function LuaUIX.new(menuName)
     end
     
     -- Create main GUI
-    self.gui = createInstance("ScreenGui", {
+    self.gui = Create("ScreenGui", {
         Name = "LuaUIX_" .. menuName,
         ResetOnSpawn = false,
         Parent = CoreGui
     })
     
     -- Create main window
-    self.window = createInstance("Frame", {
+    self.window = Create("Frame", {
         Name = "MainWindow",
         Size = UDim2.new(0, 650, 0, 500),
         Position = UDim2.new(0.5, -325, 0.5, -250),
@@ -61,25 +60,19 @@ function LuaUIX.new(menuName)
         Parent = self.gui
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 12),
-        Parent = self.window
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = self.window})
     
     -- Create titlebar
-    self.titlebar = createInstance("Frame", {
+    self.titlebar = Create("Frame", {
         Name = "Titlebar",
         Size = UDim2.new(1, 0, 0, 40),
         BackgroundColor3 = colors.titlebar,
         Parent = self.window
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 12),
-        Parent = self.titlebar
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = self.titlebar})
     
-    self.title = createInstance("TextLabel", {
+    self.title = Create("TextLabel", {
         Name = "Title",
         Size = UDim2.new(1, -10, 1, 0),
         Position = UDim2.new(0, 10, 0, 0),
@@ -93,7 +86,7 @@ function LuaUIX.new(menuName)
     })
     
     -- Create sidebar
-    self.sidebar = createInstance("Frame", {
+    self.sidebar = Create("Frame", {
         Name = "Sidebar",
         Size = UDim2.new(0, 150, 1, -40),
         Position = UDim2.new(0, 0, 0, 40),
@@ -101,13 +94,10 @@ function LuaUIX.new(menuName)
         Parent = self.window
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 12),
-        Parent = self.sidebar
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = self.sidebar})
     
     -- Create content area
-    self.content = createInstance("Frame", {
+    self.content = Create("Frame", {
         Name = "Content",
         Size = UDim2.new(1, -150, 1, -40),
         Position = UDim2.new(0, 150, 0, 40),
@@ -115,10 +105,7 @@ function LuaUIX.new(menuName)
         Parent = self.window
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 12),
-        Parent = self.content
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = self.content})
     
     -- Initialize pages table
     self.pages = {}
@@ -183,7 +170,7 @@ end
 
 -- Create a new page
 function LuaUIX:CreatePage(name, icon)
-    local page = createInstance("ScrollingFrame", {
+    local page = Create("ScrollingFrame", {
         Name = name,
         Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
@@ -193,13 +180,13 @@ function LuaUIX:CreatePage(name, icon)
         Parent = self.content
     })
     
-    local layout = createInstance("UIListLayout", {
+    Create("UIListLayout", {
         Padding = UDim.new(0, 10),
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = page
     })
     
-    local padding = createInstance("UIPadding", {
+    Create("UIPadding", {
         PaddingTop = UDim.new(0, 10),
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10),
@@ -214,7 +201,7 @@ function LuaUIX:CreatePage(name, icon)
         tabCount = tabCount + 1
     end
     
-    local tabButton = createInstance("TextButton", {
+    local tabButton = Create("TextButton", {
         Name = name .. "Tab",
         Size = UDim2.new(1, -20, 0, 40),
         Position = UDim2.new(0, 10, 0, 10 + (tabCount - 1) * 50),
@@ -226,10 +213,7 @@ function LuaUIX:CreatePage(name, icon)
         Parent = self.sidebar
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 8),
-        Parent = tabButton
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = tabButton})
     
     tabButton.MouseButton1Click:Connect(function()
         self:ShowPage(name)
@@ -265,19 +249,16 @@ end
 
 -- Create a section
 function LuaUIX:CreateSection(parent, titleText)
-    local section = createInstance("Frame", {
+    local section = Create("Frame", {
         Size = UDim2.new(1, -20, 0, 0),
         BackgroundColor3 = colors.section,
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 10),
-        Parent = section
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 10), Parent = section})
     
-    local padding = createInstance("UIPadding", {
+    Create("UIPadding", {
         PaddingTop = UDim.new(0, 10),
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10),
@@ -285,13 +266,13 @@ function LuaUIX:CreateSection(parent, titleText)
         Parent = section
     })
     
-    local layout = createInstance("UIListLayout", {
+    Create("UIListLayout", {
         Padding = UDim.new(0, 6),
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = section
     })
     
-    local header = createInstance("TextLabel", {
+    local header = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
         Text = titleText or "Section",
@@ -305,9 +286,9 @@ function LuaUIX:CreateSection(parent, titleText)
     return section
 end
 
--- Create a toggle - FIXED VERSION
+-- Create a toggle
 function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
-    local btn = createInstance("TextButton", {
+    local btn = Create("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = defaultValue and colors.accent or colors.toggleOff,
         Text = text or "Toggle",
@@ -318,10 +299,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = btn
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = btn})
     
     local state = defaultValue or false
     
@@ -337,9 +315,6 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
         SetState = function(newState)
             state = newState
             btn.BackgroundColor3 = state and colors.accent or colors.toggleOff
-            if callback then 
-                callback(state) 
-            end
         end,
         GetState = function()
             return state
@@ -350,7 +325,7 @@ end
 -- Create a button
 function LuaUIX:CreateButton(parent, text, callback, color)
     color = color or colors.button
-    local btn = createInstance("TextButton", {
+    local btn = Create("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = color,
         Text = text or "Button",
@@ -360,10 +335,7 @@ function LuaUIX:CreateButton(parent, text, callback, color)
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = btn
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = btn})
     
     btn.MouseButton1Click:Connect(function()
         if callback then 
@@ -376,13 +348,13 @@ end
 
 -- Create a slider
 function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision)
-    local frame = createInstance("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 50),
         BackgroundTransparency = 1,
         Parent = parent
     })
     
-    local label = createInstance("TextLabel", {
+    local label = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
         Text = text .. ": " .. (defaultValue or min),
@@ -393,7 +365,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
         Parent = frame
     })
     
-    local sliderBack = createInstance("Frame", {
+    local sliderBack = Create("Frame", {
         Size = UDim2.new(1, -20, 0, 8),
         Position = UDim2.new(0, 10, 0, 30),
         BackgroundColor3 = Color3.fromRGB(60, 60, 80),
@@ -401,22 +373,16 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
         Parent = frame
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 4),
-        Parent = sliderBack
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = sliderBack})
     
-    local sliderFill = createInstance("Frame", {
+    local sliderFill = Create("Frame", {
         Size = UDim2.new(defaultValue and ((defaultValue - min) / (max - min)) or 0, 0, 1, 0),
         BackgroundColor3 = colors.accent,
         BorderSizePixel = 0,
         Parent = sliderBack
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 4),
-        Parent = sliderFill
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = sliderFill})
     
     local dragging = false
     local currentValue = defaultValue or min
@@ -458,9 +424,6 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
             sliderFill.Size = UDim2.new(rel, 0, 1, 0)
             currentValue = value
             label.Text = text .. ": " .. currentValue
-            if callback then 
-                callback(currentValue) 
-            end
         end,
         GetValue = function()
             return currentValue
@@ -470,18 +433,15 @@ end
 
 -- Create a dropdown
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
-    local frame = createInstance("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = frame
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    local btn = createInstance("TextButton", {
+    local btn = Create("TextButton", {
         Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
         Text = text .. (defaultValue and (": " .. defaultValue) or " ▼"),
@@ -491,19 +451,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = frame
     })
     
-    local listFrame = createInstance("Frame", {
+    local listFrame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, #options * 28),
         BackgroundColor3 = Color3.fromRGB(30, 32, 44),
         Visible = false,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = listFrame
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
     
-    local layout = createInstance("UIListLayout", {
+    Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = listFrame
     })
@@ -511,13 +468,13 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local currentOption = defaultValue
     
     for _, opt in ipairs(options) do
-        local optBtn = createInstance("TextButton", {
+        local optBtn = Create("TextButton", {
             Size = UDim2.new(1, 0, 0, 28),
             BackgroundTransparency = 1,
             Text = opt,
             Font = Enum.Font.Gotham,
             TextSize = 14,
-            TextColor3 = colors.textSecondary,
+            TextColor3 = Color3.fromRGB(220, 220, 220),
             Parent = listFrame
         })
         
@@ -540,9 +497,6 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             if table.find(options, option) then
                 btn.Text = text .. ": " .. option
                 currentOption = option
-                if callback then 
-                    callback(option) 
-                end
             end
         end,
         GetOption = function()
@@ -553,7 +507,7 @@ end
 
 -- Create a label
 function LuaUIX:CreateLabel(parent, text, textSize, color)
-    local label = createInstance("TextLabel", {
+    local label = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
         Text = text,
@@ -569,18 +523,15 @@ end
 
 -- Create a textbox
 function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
-    local frame = createInstance("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = frame
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    local textBox = createInstance("TextBox", {
+    local textBox = Create("TextBox", {
         Size = UDim2.new(1, -10, 1, 0),
         Position = UDim2.new(0, 5, 0, 0),
         BackgroundTransparency = 1,
@@ -603,18 +554,15 @@ end
 
 -- Create a keybind
 function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
-    local frame = createInstance("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = frame
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    local label = createInstance("TextLabel", {
+    local label = Create("TextLabel", {
         Size = UDim2.new(0.6, 0, 1, 0),
         BackgroundTransparency = 1,
         Text = text,
@@ -625,7 +573,7 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
         Parent = frame
     })
     
-    local keyLabel = createInstance("TextButton", {
+    local keyLabel = Create("TextButton", {
         Size = UDim2.new(0.4, -5, 1, -5),
         Position = UDim2.new(0.6, 0, 0, 2.5),
         BackgroundColor3 = colors.accent,
@@ -637,10 +585,7 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
         Parent = frame
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = keyLabel
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = keyLabel})
     
     local listening = false
     local currentKey = defaultKey
@@ -682,18 +627,15 @@ end
 
 -- Create a color picker
 function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
-    local frame = createInstance("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = frame
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    local label = createInstance("TextLabel", {
+    local label = Create("TextLabel", {
         Size = UDim2.new(0.6, 0, 1, 0),
         BackgroundTransparency = 1,
         Text = text,
@@ -704,7 +646,7 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
         Parent = frame
     })
     
-    local colorBox = createInstance("TextButton", {
+    local colorBox = Create("TextButton", {
         Size = UDim2.new(0.4, -5, 1, -5),
         Position = UDim2.new(0.6, 0, 0, 2.5),
         BackgroundColor3 = defaultColor or colors.accent,
@@ -713,16 +655,12 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
         Parent = frame
     })
     
-    createInstance("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = colorBox
-    })
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBox})
     
     local currentColor = defaultColor or colors.accent
     
     colorBox.MouseButton1Click:Connect(function()
-        -- This would open a color picker dialog
-        -- For simplicity, we'll just cycle through some colors
+        -- Simple color cycling
         local colors = {colors.accent, colors.button, colors.success, colors.warning, colors.error}
         local nextColor = colors[(table.find(colors, currentColor) or 0) % #colors + 1]
         currentColor = nextColor
@@ -736,9 +674,6 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
         SetColor = function(color)
             currentColor = color
             colorBox.BackgroundColor3 = color
-            if callback then
-                callback(color)
-            end
         end,
         GetColor = function()
             return currentColor
@@ -746,18 +681,9 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     }
 end
 
--- Toggle UI visibility - FIXED VERSION
+-- Toggle UI visibility
 function LuaUIX:ToggleVisibility()
     self.gui.Enabled = not self.gui.Enabled
-    -- Ensure the window stays on top when toggled back on
-    if self.gui.Enabled then
-        self.window.ZIndex = 10
-        for _, child in ipairs(self.gui:GetDescendants()) do
-            if child:IsA("GuiObject") then
-                child.ZIndex = child.ZIndex + 10
-            end
-        end
-    end
 end
 
 -- Destroy UI
