@@ -1048,18 +1048,43 @@ function LuaUIX:AddTooltip(element, text)
     end)
 end
 
--- Notification system
+-- NEW NOTIFICATION FUNCTION (COPY THIS)
 function LuaUIX:Notify(title, message, duration, notifType)
     duration = duration or 5
     notifType = notifType or "info"
     
+    -- Create notification container if it doesn't exist
+    if not self.notificationContainer then
+        self.notificationContainer = Create("Frame", {
+            Name = "NotificationContainer",
+            Size = UDim2.new(0, 320, 1, 0),
+            Position = UDim2.new(1, -340, 0, 0),
+            BackgroundTransparency = 1,
+            Parent = self.gui
+        })
+        
+        Create("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 10),
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            VerticalAlignment = Enum.VerticalAlignment.Bottom,
+            Parent = self.notificationContainer
+        })
+        
+        Create("UIPadding", {
+            PaddingBottom = UDim.new(0, 20),
+            PaddingRight = UDim.new(0, 20),
+            Parent = self.notificationContainer
+        })
+    end
+    
     local notification = Create("Frame", {
         Name = "Notification",
         Size = UDim2.new(0, 300, 0, 0),
-        Position = UDim2.new(1, -320, 1, -80),
         BackgroundColor3 = colors.section,
         AutomaticSize = Enum.AutomaticSize.Y,
-        Parent = self.gui
+        LayoutOrder = 999999, -- Push to bottom
+        Parent = self.notificationContainer
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = notification})
@@ -1075,7 +1100,6 @@ function LuaUIX:Notify(title, message, duration, notifType)
     
     local titleLabel = Create("TextLabel", {
         Size = UDim2.new(1, -20, 0, 20),
-        Position = UDim2.new(0, 10, 0, 10),
         BackgroundTransparency = 1,
         Text = title,
         Font = Enum.Font.GothamBold,
@@ -1087,7 +1111,7 @@ function LuaUIX:Notify(title, message, duration, notifType)
     
     local messageLabel = Create("TextLabel", {
         Size = UDim2.new(1, -20, 0, 0),
-        Position = UDim2.new(0, 10, 0, 30),
+        Position = UDim2.new(0, 0, 0, 25),
         BackgroundTransparency = 1,
         Text = message,
         Font = Enum.Font.Gotham,
@@ -1099,7 +1123,7 @@ function LuaUIX:Notify(title, message, duration, notifType)
         Parent = notification
     })
     
-    notification.Size = UDim2.new(0, 300, 0, messageLabel.TextBounds.Y + 50)
+    notification.Size = UDim2.new(0, 300, 0, messageLabel.TextBounds.Y + 35)
     
     -- Set color based on notification type
     local color = colors.info
@@ -1115,18 +1139,29 @@ function LuaUIX:Notify(title, message, duration, notifType)
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = accentBar})
     
-    -- Animate in
-    self:Tween(notification, {Position = UDim2.new(1, -320, 1, -280)})
+    -- Animate in from the right
+    notification.Position = UDim2.new(1, 0, 0, 0)
+    self:Tween(notification, {Position = UDim2.new(0, 0, 0, 0)})
     
     -- Auto-remove after duration
     delay(duration, function()
-        self:Tween(notification, {Position = UDim2.new(1, -320, 1, -80)}):Wait()
-        notification:Destroy()
+        if notification and notification.Parent then
+            -- Fade out animation
+            self:Tween(notification, {
+                Position = UDim2.new(1, 0, 0, 0),
+                BackgroundTransparency = 1
+            })
+            
+            -- Wait for animation to complete
+            wait(0.3)
+            if notification and notification.Parent then
+                notification:Destroy()
+            end
+        end
     end)
     
     return notification
 end
-
 -- Focus management
 function LuaUIX:SetFocusedElement(element)
     self.focusedElement = element
