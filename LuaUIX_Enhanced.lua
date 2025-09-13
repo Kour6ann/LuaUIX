@@ -1,4 +1,4 @@
--- LuaUIX Library v1.1 - Fixed Implementation with Config System
+-- LuaUIX Library v1.2 - Complete Fix
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -223,15 +223,6 @@ end
 -- Make window draggable
 function LuaUIX:draggable(frame)
     local dragInput, dragStart, startPos
-    local dragConnection
-    
-    local function endDrag()
-        dragStart = nil
-        if dragConnection then
-            dragConnection:Disconnect()
-            dragConnection = nil
-        end
-    end
     
     frame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -240,7 +231,7 @@ function LuaUIX:draggable(frame)
             
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
-                    endDrag()
+                    dragStart = nil
                 end
             end)
         end
@@ -252,7 +243,7 @@ function LuaUIX:draggable(frame)
         end
     end)
     
-    local mainDragConnection = UserInputService.InputChanged:Connect(function(input)
+    local connection = UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragStart then
             local delta = input.Position - dragStart
             self.window.Position = UDim2.new(
@@ -264,7 +255,7 @@ function LuaUIX:draggable(frame)
         end
     end)
     
-    table.insert(self.connections, mainDragConnection)
+    table.insert(self.connections, connection)
 end
 
 -- Setup UI toggle keybind
@@ -466,7 +457,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     table.insert(connections, clickConnection)
     
     -- Add to config system
-    local elementId = #self.elements + 1
+    local elementId = "toggle_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         Get = function()
             return state
@@ -483,26 +474,12 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
         end
     }
     
-    return {
-        Get = function()
-            return state
-        end,
-        Set = function(value)
-            state = value
-            self:Tween(btn, {BackgroundColor3 = state and colors.accent or colors.toggleOff})
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            btn:Destroy()
-        end
-    }
+    return self.elements[elementId]
 end
 
 -- Create a slider
-function LuaUIX:CreateSlider(parent, text, minValue, maxValue, defaultValue, callback, valueSuffix)
-    local sliderFrame = Create("Frame", {
+function LuaUIX:CreateSlider(parent, text, minValue, maxValue, callback, defaultValue, precision)
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 60),
         BackgroundTransparency = 1,
         Parent = parent
@@ -511,12 +488,12 @@ function LuaUIX:CreateSlider(parent, text, minValue, maxValue, defaultValue, cal
     local label = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
-        Text = text or "Slider",
+        Text = text .. ": " .. (defaultValue or minValue),
         Font = Enum.Font.Gotham,
         TextSize = 14,
-        TextColor3 = colors.text,
+        TextColor3 = colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = sliderFrame
+        Parent = frame
     })
     
     -- Add consistent padding to slider labels
@@ -525,827 +502,597 @@ function LuaUIX:CreateSlider(parent, text, minValue, maxValue, defaultValue, cal
         Parent = label
     })
     
-    local valueLabel = Create("TextLabel", {
-        Size = UDim2.new(0, 60, 0, 20),
-        Position = UDim2.new(1, -60, 0, 0),
-        BackgroundTransparency = 1,
-        Text = (defaultValue or minValue) .. (valueSuffix or ""),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.textSecondary,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        Parent = sliderFrame
+    local sliderBack = Create("Frame", {
+        Size = UDim2.new(1, -20, 0, 8),
+        Position = UDim2.new(0, 10, 0, 30),
+        BackgroundColor3 = Color3.fromRGB(60, 60, 80),
+        BorderSizePixel = 0,
+        Parent = frame
     })
     
-    local sliderBar = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 6),
-        Position = UDim2.new(0, 0, 0, 30),
-        BackgroundColor3 = colors.toggleOff,
-        Parent = sliderFrame
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = sliderBar})
+    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = sliderBack})
     
     local sliderFill = Create("Frame", {
-        Size = UDim2.new(0, 0, 1, 0),
+        Size = UDim2.new(defaultValue and ((defaultValue - minValue) / (maxValue - minValue)) or 0, 0, 1, 0),
         BackgroundColor3 = colors.accent,
-        Parent = sliderBar
+        BorderSizePixel = 0,
+        Parent = sliderBack
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = sliderFill})
+    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = sliderFill})
     
-    local sliderButton = Create("TextButton", {
-        Size = UDim2.new(0, 16, 0, 16),
-        Position = UDim2.new(0, 0, 0.5, -8),
-        BackgroundColor3 = colors.text,
-        Text = "",
-        Parent = sliderBar
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = sliderButton})
-    
-    local value = defaultValue or minValue
     local dragging = false
+    local currentValue = defaultValue or minValue
+    local precision = precision or 0
     local connections = {}
     
-    -- Calculate fill width based on value
-    local function updateSlider()
-        local fillWidth = ((value - minValue) / (maxValue - minValue)) * sliderBar.AbsoluteSize.X
-        sliderFill.Size = UDim2.new(0, fillWidth, 1, 0)
-        sliderButton.Position = UDim2.new(0, fillWidth - 8, 0.5, -8)
-        valueLabel.Text = tostring(math.floor(value * 100) / 100) .. (valueSuffix or "")
+    local function updateSlider(value)
+        local rel = math.clamp((value - minValue) / (maxValue - minValue), 0, 1)
+        self:Tween(sliderFill, {Size = UDim2.new(rel, 0, 1, 0)})
+        
+        if precision > 0 then
+            currentValue = math.floor((minValue + (maxValue - minValue) * rel) * 10^precision) / 10^precision
+        else
+            currentValue = math.floor(minValue + (maxValue - minValue) * rel)
+        end
+        
+        label.Text = text .. ": " .. currentValue
+        
+        pcall(function()
+            if callback then
+                callback(currentValue)
+            end
+        end)
     end
     
-    updateSlider()
-    
-    local function startDrag(input)
+    local beginConnection = sliderBack.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            local dragConnection
-            
-            dragConnection = RunService.RenderStepped:Connect(function()
-                if not dragging then
-                    dragConnection:Disconnect()
-                    return
-                end
-                
-                local mousePos = UserInputService:GetMouseLocation()
-                local barPos = sliderBar.AbsolutePosition
-                local barSize = sliderBar.AbsoluteSize.X
-                
-                local relativeX = math.clamp(mousePos.X - barPos.X, 0, barSize)
-                local percentage = relativeX / barSize
-                value = math.floor((minValue + (maxValue - minValue) * percentage) * 100) / 100
-                
-                updateSlider()
-                
-                pcall(function()
-                    if callback then
-                        callback(value)
-                    end
-                end)
-            end)
-            
-            table.insert(connections, dragConnection)
+            local mousePos = UserInputService:GetMouseLocation()
+            local rel = math.clamp((mousePos.X - sliderBack.AbsolutePosition.X) / sliderBack.AbsoluteSize.X, 0, 1)
+            updateSlider(minValue + (maxValue - minValue) * rel)
         end
-    end
+    end)
+    table.insert(connections, beginConnection)
     
-    local function endDrag(input)
+    local endConnection = sliderBack.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
         end
-    end
-    
-    local buttonConnection = sliderButton.MouseButton1Down:Connect(startDrag)
-    table.insert(connections, buttonConnection)
-    
-    local barConnection = sliderBar.MouseButton1Down:Connect(startDrag)
-    table.insert(connections, barConnection)
-    
-    local endConnection = UserInputService.InputEnded:Connect(endDrag)
+    end)
     table.insert(connections, endConnection)
     
+    local changedConnection = UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local rel = math.clamp((input.Position.X - sliderBack.AbsolutePosition.X) / sliderBack.AbsoluteSize.X, 0, 1)
+            updateSlider(minValue + (maxValue - minValue) * rel)
+        end
+    end)
+    table.insert(connections, changedConnection)
+    
     -- Add to config system
-    local elementId = #self.elements + 1
+    local elementId = "slider_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
-        Get = function()
-            return value
+        SetValue = function(value)
+            updateSlider(value)
         end,
-        Set = function(newValue)
-            value = math.clamp(newValue, minValue, maxValue)
-            updateSlider()
+        GetValue = function()
+            return currentValue
         end,
         Destroy = function()
             for _, conn in ipairs(connections) do
                 conn:Disconnect()
             end
-            sliderFrame:Destroy()
+            frame:Destroy()
         end
     }
     
-    return {
-        Get = function()
-            return value
-        end,
-        Set = function(newValue)
-            value = math.clamp(newValue, minValue, maxValue)
-            updateSlider()
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            sliderFrame:Destroy()
-        end
-    }
+    return self.elements[elementId]
 end
 
 -- Create a dropdown
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
-    local dropdownFrame = Create("Frame", {
+    local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    local label = Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 20),
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
+    
+    local btn = Create("TextButton", {
+        Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
-        Text = text or "Dropdown",
+        Text = text .. (defaultValue and (": " .. defaultValue) or " ▼"),
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = dropdownFrame
+        Parent = frame
     })
-    
-    -- Add consistent padding to dropdown labels
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 6),
-        Parent = label
-    })
-    
-    local dropdownButton = Create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 30),
-        Position = UDim2.new(0, 0, 0, 25),
-        BackgroundColor3 = colors.toggleOff,
-        Text = defaultValue or "Select...",
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        AutoButtonColor = false,
-        Parent = dropdownFrame
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = dropdownButton})
     
     -- Add consistent padding to dropdown buttons
     Create("UIPadding", {
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10),
-        Parent = dropdownButton
+        Parent = btn
     })
     
-    local dropdownList = Create("ScrollingFrame", {
+    local listFrame = Create("ScrollingFrame", {
         Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.new(0, 0, 0, 60),
-        BackgroundColor3 = colors.section,
+        Position = UDim2.new(0, 0, 0, 35),
+        BackgroundColor3 = Color3.fromRGB(30, 32, 44),
+        Visible = false,
         ScrollBarThickness = 6,
         ScrollBarImageColor3 = colors.accent,
-        Visible = false,
-        Parent = dropdownFrame
+        Parent = parent
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = dropdownList})
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
     
-    Create("UIListLayout", {
+    local listLayout = Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = dropdownList
+        Parent = listFrame
     })
     
-    local selected = defaultValue
-    local open = false
+    local currentOption = defaultValue
     local connections = {}
     
-    local function updateDropdown()
-        dropdownButton.Text = selected or "Select..."
-    end
-    
-    local function toggleDropdown()
-        open = not open
-        dropdownList.Visible = open
-        
-        if open then
-            self:Tween(dropdownList, {Size = UDim2.new(1, 0, 0, math.min(#options * 30, 150))})
-        else
-            self:Tween(dropdownList, {Size = UDim2.new(1, 0, 0, 0)})
-        end
-    end
-    
-    local function closeDropdown()
-        if open then
-            open = false
-            self:Tween(dropdownList, {Size = UDim2.new(1, 0, 0, 0)})
-            dropdownList.Visible = false
-        end
-    end
-    
-    -- Populate dropdown options
-    for i, option in ipairs(options) do
-        local optionButton = Create("TextButton", {
-            Size = UDim2.new(1, 0, 0, 30),
-            BackgroundColor3 = colors.toggleOff,
-            Text = option,
+    -- Create options
+    for _, opt in ipairs(options) do
+        local optBtn = Create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 28),
+            BackgroundTransparency = 1,
+            Text = opt,
             Font = Enum.Font.Gotham,
             TextSize = 14,
-            TextColor3 = colors.text,
-            AutoButtonColor = false,
-            LayoutOrder = i,
-            Parent = dropdownList
+            TextColor3 = Color3.fromRGB(220, 220, 220),
+            LayoutOrder = _,
+            Parent = listFrame
         })
-        
-        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = optionButton})
         
         -- Add consistent padding to dropdown options
         Create("UIPadding", {
             PaddingLeft = UDim.new(0, 10),
             PaddingRight = UDim.new(0, 10),
-            Parent = optionButton
+            Parent = optBtn
         })
         
-        local optionConnection = optionButton.MouseButton1Click:Connect(function()
-            selected = option
-            updateDropdown()
-            closeDropdown()
+        local optionConnection = optBtn.MouseButton1Click:Connect(function()
+            btn.Text = text .. ": " .. opt
+            currentOption = opt
+            listFrame.Visible = false
+            listFrame.Size = UDim2.new(1, 0, 0, 0)
             
             pcall(function()
                 if callback then
-                    callback(option)
+                    callback(opt)
                 end
             end)
         end)
-        
         table.insert(connections, optionConnection)
     end
     
-    local buttonConnection = dropdownButton.MouseButton1Click:Connect(function()
-        toggleDropdown()
+    -- Update list frame size based on content
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end)
     
+    local buttonConnection = btn.MouseButton1Click:Connect(function()
+        if listFrame.Visible then
+            listFrame.Visible = false
+            listFrame.Size = UDim2.new(1, 0, 0, 0)
+        else
+            listFrame.Visible = true
+            -- Show max 5 options at a time with scrolling
+            local maxHeight = math.min(#options * 28, 140)
+            listFrame.Size = UDim2.new(1, 0, 0, maxHeight)
+        end
+    end)
     table.insert(connections, buttonConnection)
     
-    -- Close dropdown when clicking elsewhere
-    local closeConnection
-    closeConnection = UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local mousePos = UserInputService:GetMouseLocation()
-            local buttonPos = dropdownButton.AbsolutePosition
-            local buttonSize = dropdownButton.AbsoluteSize
+    -- Close dropdown when clicking outside
+    local function closeDropdown(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
+            local mousePos = input.Position
+            local framePos = frame.AbsolutePosition
+            local frameSize = frame.AbsoluteSize
+            local listPos = listFrame.AbsolutePosition
+            local listSize = listFrame.AbsoluteSize
             
-            -- Check if mouse is outside the dropdown
-            if mousePos.X < buttonPos.X or mousePos.X > buttonPos.X + buttonSize.X or
-               mousePos.Y < buttonPos.Y or mousePos.Y > buttonPos.Y + buttonSize.Y + (open and dropdownList.AbsoluteSize.Y or 0) then
-                closeDropdown()
+            -- Check if mouse is outside both frame and listFrame
+            if not (
+                (mousePos.X >= framePos.X and mousePos.X <= framePos.X + frameSize.X and
+                 mousePos.Y >= framePos.Y and mousePos.Y <= framePos.Y + frameSize.Y) or
+                (mousePos.X >= listPos.X and mousePos.X <= listPos.X + listSize.X and
+                 mousePos.Y >= listPos.Y and mousePos.Y <= listPos.Y + listSize.Y)
+            ) then
+                listFrame.Visible = false
+                listFrame.Size = UDim2.new(1, 0, 0, 0)
             end
         end
-    end)
+    end
     
-    table.insert(connections, closeConnection)
-    
-    updateDropdown()
+    local inputConnection = UserInputService.InputBegan:Connect(closeDropdown)
+    table.insert(connections, inputConnection)
     
     -- Add to config system
-    local elementId = #self.elements + 1
+    local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
-        Get = function()
-            return selected
-        end,
-        Set = function(value)
-            if table.find(options, value) then
-                selected = value
-                updateDropdown()
+        SetOption = function(option)
+            if table.find(options, option) then
+                btn.Text = text .. ": " .. option
+                currentOption = option
             end
+        end,
+        GetOption = function()
+            return currentOption
         end,
         Destroy = function()
             for _, conn in ipairs(connections) do
                 conn:Disconnect()
             end
-            dropdownFrame:Destroy()
+            frame:Destroy()
+            listFrame:Destroy()
         end
     }
     
-    return {
-        Get = function()
-            return selected
-        end,
-        Set = function(value)
-            if table.find(options, value) then
-                selected = value
-                updateDropdown()
-            end
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            dropdownFrame:Destroy()
-        end
-    }
+    return self.elements[elementId]
 end
 
 -- Create a textbox
-function LuaUIX:CreateTextbox(parent, text, placeholder, callback, defaultValue)
-    local textboxFrame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 60),
-        BackgroundTransparency = 1,
+function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
+    local frame = Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
-    local label = Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 20),
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
+    
+    local textBox = Create("TextBox", {
+        Size = UDim2.new(1, -20, 1, -10),
+        Position = UDim2.new(0, 10, 0, 5),
         BackgroundTransparency = 1,
-        Text = text or "Textbox",
+        Text = text or "",
+        PlaceholderText = placeholder or "",
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = textboxFrame
+        Parent = frame
     })
-    
-    -- Add consistent padding to textbox labels
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 6),
-        Parent = label
-    })
-    
-    local textbox = Create("TextBox", {
-        Size = UDim2.new(1, 0, 0, 30),
-        Position = UDim2.new(0, 0, 0, 25),
-        BackgroundColor3 = colors.toggleOff,
-        Text = defaultValue or "",
-        PlaceholderText = placeholder or "Enter text...",
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        Parent = textboxFrame
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = textbox})
     
     -- Add consistent padding to textboxes
     Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = textbox
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
+        Parent = textBox
     })
     
     local connections = {}
     
-    local focusConnection = textbox.Focused:Connect(function()
-        self:Tween(textbox, {BackgroundColor3 = colors.accent})
+    local focusConnection = textBox.Focused:Connect(function()
+        self:SetFocusedElement(textBox)
+        self:Tween(frame, {BackgroundColor3 = Color3.fromRGB(
+            math.floor(colors.toggleOff.R * 255 * 1.2),
+            math.floor(colors.toggleOff.G * 255 * 1.2),
+            math.floor(colors.toggleOff.B * 255 * 1.2)
+        )})
     end)
-    
     table.insert(connections, focusConnection)
     
-    local unfocusConnection = textbox.FocusLost:Connect(function()
-        self:Tween(textbox, {BackgroundColor3 = colors.toggleOff})
+    local unfocusConnection = textBox.FocusLost:Connect(function(enterPressed)
+        self:SetFocusedElement(nil)
+        self:Tween(frame, {BackgroundColor3 = colors.toggleOff})
         
         pcall(function()
-            if callback then
-                callback(textbox.Text)
+            if enterPressed and callback then
+                callback(textBox.Text)
             end
         end)
     end)
-    
     table.insert(connections, unfocusConnection)
     
     -- Add to config system
-    local elementId = #self.elements + 1
+    local elementId = "textbox_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
-        Get = function()
-            return textbox.Text
+        SetText = function(newText)
+            textBox.Text = newText
         end,
-        Set = function(value)
-            textbox.Text = tostring(value)
+        GetText = function()
+            return textBox.Text
         end,
         Destroy = function()
             for _, conn in ipairs(connections) do
                 conn:Disconnect()
             end
-            textboxFrame:Destroy()
+            frame:Destroy()
         end
     }
     
-    return {
-        Get = function()
-            return textbox.Text
-        end,
-        Set = function(value)
-            textbox.Text = tostring(value)
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            textboxFrame:Destroy()
-        end
-    }
+    return self.elements[elementId]
 end
 
 -- Create a keybind
-function LuaUIX:CreateKeybind(parent, text, callback, defaultValue)
-    local keybindFrame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 60),
-        BackgroundTransparency = 1,
+function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
+    local frame = Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
+    
     local label = Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 20),
+        Size = UDim2.new(0.6, 0, 1, 0),
         BackgroundTransparency = 1,
-        Text = text or "Keybind",
+        Text = text,
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = keybindFrame
+        Parent = frame
     })
     
     -- Add consistent padding to keybind labels
     Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 6),
+        PaddingLeft = UDim.new(0, 10),
         Parent = label
     })
     
-    local keybindButton = Create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 30),
-        Position = UDim2.new(0, 0, 0, 25),
-        BackgroundColor3 = colors.toggleOff,
-        Text = defaultValue and defaultValue.Name or "Click to bind",
-        Font = Enum.Font.Gotham,
+    local keyLabel = Create("TextButton", {
+        Size = UDim2.new(0.4, -15, 1, -10),
+        Position = UDim2.new(0.6, 5, 0, 5),
+        BackgroundColor3 = colors.accent,
+        Text = defaultKey and defaultKey.Name or "NONE",
+        Font = Enum.Font.GothamBold,
         TextSize = 14,
         TextColor3 = colors.text,
         AutoButtonColor = false,
-        Parent = keybindFrame
+        Parent = frame
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = keybindButton})
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = keyLabel})
     
     -- Add consistent padding to keybind buttons
     Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = keybindButton
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
+        Parent = keyLabel
     })
     
-    local key = defaultValue
     local listening = false
+    local currentKey = defaultKey
     local connections = {}
     
-    local function updateKeybind()
-        keybindButton.Text = key and key.Name or "Click to bind"
-    end
-    
-    local function startListening()
+    keyLabel.MouseButton1Click:Connect(function()
         listening = true
-        keybindButton.Text = "Press any key..."
-        self:Tween(keybindButton, {BackgroundColor3 = colors.accent})
-    end
-    
-    local function stopListening()
-        listening = false
-        updateKeybind()
-        self:Tween(keybindButton, {BackgroundColor3 = colors.toggleOff})
-    end
-    
-    local buttonConnection = keybindButton.MouseButton1Click:Connect(function()
-        if not listening then
-            startListening()
-        else
-            stopListening()
-        end
+        keyLabel.Text = "..."
+        keyLabel.BackgroundColor3 = colors.warning
     end)
-    
-    table.insert(connections, buttonConnection)
     
     local inputConnection = UserInputService.InputBegan:Connect(function(input)
         if listening and not UserInputService:GetFocusedTextBox() then
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                key = input.KeyCode
-                stopListening()
-                
-                pcall(function()
-                    if callback then
-                        callback(key)
-                    end
-                end)
-            elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-                key = Enum.UserInputType.MouseButton1
-                stopListening()
-                
-                pcall(function()
-                    if callback then
-                        callback(key)
-                    end
-                end)
-            end
+            listening = false
+            currentKey = input.KeyCode
+            keyLabel.Text = currentKey.Name
+            keyLabel.BackgroundColor3 = colors.accent
         end
     end)
-    
     table.insert(connections, inputConnection)
     
-    updateKeybind()
+    if defaultKey and callback then
+        local keyConnection = UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode == currentKey and not UserInputService:GetFocusedTextBox() then
+                pcall(function()
+                    callback()
+                end)
+            end
+        end)
+        table.insert(connections, keyConnection)
+    end
     
     -- Add to config system
-    local elementId = #self.elements + 1
+    local elementId = "keybind_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
-        Get = function()
-            return key
+        SetKey = function(key)
+            currentKey = key
+            keyLabel.Text = key.Name
         end,
-        Set = function(value)
-            key = value
-            updateKeybind()
+        GetKey = function()
+            return currentKey
         end,
         Destroy = function()
             for _, conn in ipairs(connections) do
                 conn:Disconnect()
             end
-            keybindFrame:Destroy()
+            frame:Destroy()
         end
     }
     
-    return {
-        Get = function()
-            return key
-        end,
-        Set = function(value)
-            key = value
-            updateKeybind()
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            keybindFrame:Destroy()
-        end
-    }
+    return self.elements[elementId]
 end
 
 -- Create a color picker
-function LuaUIX:CreateColorPicker(parent, text, callback, defaultValue)
-    local colorPickerFrame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 60),
-        BackgroundTransparency = 1,
+function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
+    local frame = Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = colors.toggleOff,
         Parent = parent
     })
     
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
+    
     local label = Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 20),
+        Size = UDim2.new(0.6, 0, 1, 0),
         BackgroundTransparency = 1,
-        Text = text or "Color Picker",
+        Text = text,
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = colorPickerFrame
+        Parent = frame
     })
     
     -- Add consistent padding to color picker labels
     Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 6),
+        PaddingLeft = UDim.new(0, 10),
         Parent = label
     })
     
-    local colorButton = Create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 30),
-        Position = UDim2.new(0, 0, 0, 25),
-        BackgroundColor3 = defaultValue or colors.accent,
-        Text = "Pick Color",
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
+    local colorBox = Create("TextButton", {
+        Size = UDim2.new(0.4, -15, 1, -10),
+        Position = UDim2.new(0.6, 5, 0, 5),
+        BackgroundColor3 = defaultColor or colors.accent,
+        Text = "",
         AutoButtonColor = false,
-        Parent = colorPickerFrame
+        Parent = frame
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorButton})
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBox})
     
-    -- Add consistent padding to color picker buttons
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = colorButton
-    })
-    
-    local color = defaultValue or colors.accent
+    local currentColor = defaultColor or colors.accent
     local connections = {}
     
-    local function updateColor()
-        colorButton.BackgroundColor3 = color
-    end
-    
-    local function CreateColorPickerDialog()
+    colorBox.MouseButton1Click:Connect(function()
         -- Create color picker dialog
-        local dialog = Create("Frame", {
-            Size = UDim2.new(0, 250, 0, 200),
-            Position = UDim2.new(0.5, -125, 0.5, -100),
-            BackgroundColor3 = colors.background,
-            Parent = self.gui
-        })
-        
-        Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = dialog})
-        
-        local title = Create("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 30),
-            BackgroundColor3 = colors.titlebar,
-            Text = "Color Picker",
-            Font = Enum.Font.GothamBold,
-            TextSize = 16,
-            TextColor3 = colors.text,
-            Parent = dialog
-        })
-        
-        Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = title})
-        
-        local colorCanvas = Create("ImageButton", {
-            Size = UDim2.new(0, 180, 0, 180),
-            Position = UDim2.new(0, 10, 0, 40),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            Image = "rbxassetid://2615689005",
-            Parent = dialog
-        })
-        
-        local hueSlider = Create("ImageButton", {
-            Size = UDim2.new(0, 20, 0, 180),
-            Position = UDim2.new(1, -30, 0, 40),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            Image = "rbxassetid://2615692420",
-            Parent = dialog
-        })
-        
-        local closeButton = Create("TextButton", {
-            Size = UDim2.new(0, 25, 0, 25),
-            Position = UDim2.new(1, -30, 0, 5),
-            BackgroundColor3 = colors.close,
-            Text = "X",
-            Font = Enum.Font.GothamBold,
-            TextSize = 14,
-            TextColor3 = colors.text,
-            Parent = dialog
-        })
-        
-        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = closeButton})
-        
-        local selectedColor = color
-        local hue = 0
-        local saturation = 0
-        local value = 0
-        
-        local function updateFromHsv()
-            selectedColor = Color3.fromHSV(hue, saturation, value)
-            colorCanvas.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+        self:CreateColorPickerDialog(currentColor, function(newColor)
+            currentColor = newColor
+            colorBox.BackgroundColor3 = currentColor
+            
+            pcall(function()
+                if callback then
+                    callback(currentColor)
+                end
+            end)
+        end)
+    end)
+    
+    -- Add to config system
+    local elementId = "colorpicker_" .. HttpService:GenerateGUID(false)
+    self.elements[elementId] = {
+        SetColor = function(color)
+            currentColor = color
+            colorBox.BackgroundColor3 = color
+        end,
+        GetColor = function()
+            return currentColor
+        end,
+        Destroy = function()
+            for _, conn in ipairs(connections) do
+                conn:Disconnect()
+            end
+            frame:Destroy()
         end
+    }
+    
+    return self.elements[elementId]
+end
+
+-- Create color picker dialog
+function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
+    local dialog = Create("Frame", {
+        Name = "ColorPickerDialog",
+        Size = UDim2.new(0, 300, 0, 200),
+        Position = UDim2.new(0.5, -150, 0.5, -100),
+        BackgroundColor3 = colors.section,
+        Parent = self.gui
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = dialog})
+    
+    -- Add padding to dialog
+    Create("UIPadding", {
+        PaddingTop = UDim.new(0, 10),
+        PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 10),
+        PaddingBottom = UDim.new(0, 10),
+        Parent = dialog
+    })
+    
+    -- Simple color selection buttons
+    local presetColors = {
+        Color3.fromRGB(255, 0, 0),    -- Red
+        Color3.fromRGB(0, 255, 0),    -- Green
+        Color3.fromRGB(0, 0, 255),    -- Blue
+        Color3.fromRGB(255, 255, 0),  -- Yellow
+        Color3.fromRGB(255, 0, 255),  -- Magenta
+        Color3.fromRGB(0, 255, 255),  -- Cyan
+        Color3.fromRGB(255, 165, 0),  -- Orange
+        Color3.fromRGB(128, 0, 128)   -- Purple
+    }
+    
+    for i, color in ipairs(presetColors) do
+        local colorBtn = Create("TextButton", {
+            Size = UDim2.new(0, 40, 0, 40),
+            Position = UDim2.new(0, 20 + ((i-1) % 4) * 70, 0, 20 + math.floor((i-1)/4) * 70),
+            BackgroundColor3 = color,
+            Text = "",
+            Parent = dialog
+        })
         
-        local function updateFromRgb()
-            hue, saturation, value = selectedColor:ToHSV()
-            colorCanvas.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
-        end
+        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBtn})
         
-        local function closeDialog()
+        colorBtn.MouseButton1Click:Connect(function()
             dialog:Destroy()
-        end
-        
-        local function applyColor()
-            color = selectedColor
-            updateColor()
             
             pcall(function()
                 if callback then
                     callback(color)
                 end
             end)
-        end
-        
-        closeButton.MouseButton1Click:Connect(closeDialog)
-        
-        -- Color canvas interaction
-        colorCanvas.MouseButton1Down:Connect(function()
-            local connection
-            connection = RunService.RenderStepped:Connect(function()
-                if not dialog.Parent then
-                    connection:Disconnect()
-                    return
-                end
-                
-                local mousePos = UserInputService:GetMouseLocation()
-                local canvasPos = colorCanvas.AbsolutePosition
-                local canvasSize = colorCanvas.AbsoluteSize
-                
-                local relativeX = math.clamp(mousePos.X - canvasPos.X, 0, canvasSize.X)
-                local relativeY = math.clamp(mousePos.Y - canvasPos.Y, 0, canvasSize.Y)
-                
-                saturation = relativeX / canvasSize.X
-                value = 1 - (relativeY / canvasSize.Y)
-                
-                updateFromHsv()
-            end)
-            
-            UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    connection:Disconnect()
-                    applyColor()
-                end
-            end)
         end)
-        
-        -- Hue slider interaction
-        hueSlider.MouseButton1Down:Connect(function()
-            local connection
-            connection = RunService.RenderStepped:Connect(function()
-                if not dialog.Parent then
-                    connection:Disconnect()
-                    return
-                end
-                
-                local mousePos = UserInputService:GetMouseLocation()
-                local sliderPos = hueSlider.AbsolutePosition
-                local sliderSize = hueSlider.AbsoluteSize
-                
-                local relativeY = math.clamp(mousePos.Y - sliderPos.Y, 0, sliderSize.Y)
-                
-                hue = 1 - (relativeY / sliderSize.Y)
-                
-                updateFromHsv()
-            end)
-            
-            UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    connection:Disconnect()
-                    applyColor()
-                end
-            end)
-        end)
-        
-        updateFromRgb()
     end
     
-    local buttonConnection = colorButton.MouseButton1Click:Connect(function()
-        CreateColorPickerDialog()
+    local closeButton = Create("TextButton", {
+        Size = UDim2.new(0, 80, 0, 30),
+        Position = UDim2.new(0.5, -40, 1, -40),
+        BackgroundColor3 = colors.accent,
+        Text = "Cancel",
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        Parent = dialog
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = closeButton})
+    
+    -- Add consistent padding to dialog buttons
+    Create("UIPadding", {
+        PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 10),
+        Parent = closeButton
+    })
+    
+    closeButton.MouseButton1Click:Connect(function()
+        dialog:Destroy()
     end)
     
-    table.insert(connections, buttonConnection)
-    
-    updateColor()
-    
-    -- Add to config system
-    local elementId = #self.elements + 1
-    self.elements[elementId] = {
-        Get = function()
-            return color
-        end,
-        Set = function(value)
-            color = value
-            updateColor()
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            colorPickerFrame:Destroy()
-        end
-    }
-    
-    return {
-        Get = function()
-            return color
-        end,
-        Set = function(value)
-            color = value
-            updateColor()
-        end,
-        Destroy = function()
-            for _, conn in ipairs(connections) do
-                conn:Disconnect()
-            end
-            colorPickerFrame:Destroy()
-        end
-    }
+    return dialog
 end
 
--- Make UI responsive to screen size changes
+-- Make UI responsive to screen size
 function LuaUIX:MakeResponsive()
     local function updateSize()
         local viewportSize = workspace.CurrentCamera.ViewportSize
-        local scale = math.min(1, viewportSize.X / 1920, viewportSize.Y / 1080)
+        local scale = math.min(viewportSize.X / 1920, viewportSize.Y / 1080) * 0.9
         
         self.window.Size = UDim2.new(0, 650 * scale, 0, 500 * scale)
         self.window.Position = UDim2.new(0.5, -325 * scale, 0.5, -250 * scale)
     end
     
-    local viewportConnection = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateSize)
-    table.insert(self.connections, viewportConnection)
+    local connection = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateSize)
+    table.insert(self.connections, connection)
     
     updateSize()
+end
+
+-- Focus management
+function LuaUIX:SetFocusedElement(element)
+    self.focusedElement = element
+end
+
+function LuaUIX:GetFocusedElement()
+    return self.focusedElement
 end
 
 -- Toggle UI visibility
@@ -1361,8 +1108,8 @@ function LuaUIX:SaveConfig(name)
     
     local configData = {}
     
-    for i, element in ipairs(self.elements) do
-        local value = element.Get()
+    for id, element in pairs(self.elements) do
+        local value = element.Get and element:Get()
         
         -- Handle Color3 values
         if typeof(value) == "Color3" then
@@ -1372,7 +1119,7 @@ function LuaUIX:SaveConfig(name)
             value = {Enum = tostring(value.EnumType), Value = value.Value}
         end
         
-        configData[i] = value
+        configData[id] = value
     end
     
     local jsonData = HttpService:JSONEncode(configData)
@@ -1401,8 +1148,8 @@ function LuaUIX:LoadConfig(name)
             end)
             
             if success2 and configData then
-                for i, value in pairs(configData) do
-                    if self.elements[i] then
+                for id, value in pairs(configData) do
+                    if self.elements[id] and self.elements[id].Set then
                         -- Handle Color3 values
                         if type(value) == "table" and #value == 3 then
                             value = Color3.new(value[1], value[2], value[3])
@@ -1414,7 +1161,7 @@ function LuaUIX:LoadConfig(name)
                             end
                         end
                         
-                        self.elements[i].Set(value)
+                        self.elements[id]:Set(value)
                     end
                 end
                 
@@ -1442,46 +1189,29 @@ function LuaUIX:DeleteConfig(name)
     return false
 end
 
--- Cleanup function
+-- Destroy UI
 function LuaUIX:Destroy()
     -- Disconnect all connections
     for _, connection in ipairs(self.connections) do
-        if connection then
-            pcall(function()
-                connection:Disconnect()
-            end)
+        if connection.Connected then
+            connection:Disconnect()
         end
     end
     
     -- Cancel all tweens
     for _, tween in ipairs(self.tweens) do
-        if tween then
-            pcall(function()
-                tween:Cancel()
-            end)
-        end
+        tween:Cancel()
     end
     
     -- Destroy all elements
-    for _, element in ipairs(self.elements) do
-        if element and element.Destroy then
-            pcall(function()
-                element:Destroy()
-            end)
+    for _, element in pairs(self.elements) do
+        if element.Destroy then
+            element:Destroy()
         end
     end
     
     -- Destroy GUI
-    if self.gui then
-        self.gui:Destroy()
-    end
-    
-    -- Clear tables
-    self.connections = {}
-    self.tweens = {}
-    self.elements = {}
-    self.pages = {}
-    self.tabButtons = {}
+    self.gui:Destroy()
 end
 
 return LuaUIX
