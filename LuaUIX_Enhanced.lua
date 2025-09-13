@@ -577,7 +577,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- Create a dropdown
+-- Fixed Dropdown Implementation
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
@@ -604,22 +604,26 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = btn
     })
     
-    local listFrame = Create("Frame", {
+    local listFrame = Create("ScrollingFrame", {
         Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.new(0, 0, 0, 35),
         BackgroundColor3 = Color3.fromRGB(30, 32, 44),
         Visible = false,
+        ScrollBarThickness = 6,
+        ScrollBarImageColor3 = colors.accent,
         Parent = parent
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
     
-    Create("UIListLayout", {
+    local listLayout = Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = listFrame
     })
     
     local currentOption = defaultValue
     
+    -- Create options
     for _, opt in ipairs(options) do
         local optBtn = Create("TextButton", {
             Size = UDim2.new(1, 0, 0, 28),
@@ -628,6 +632,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Font = Enum.Font.Gotham,
             TextSize = 14,
             TextColor3 = Color3.fromRGB(220, 220, 220),
+            LayoutOrder = _,
             Parent = listFrame
         })
         
@@ -640,26 +645,43 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         
         optBtn.MouseButton1Click:Connect(function()
             btn.Text = text .. ": " .. opt
-            self:Tween(listFrame, {Size = UDim2.new(1, 0, 0, 0)})
-            wait(0.2)
-            listFrame.Visible = false
             currentOption = opt
+            listFrame.Visible = false
+            listFrame.Size = UDim2.new(1, 0, 0, 0)
             if callback then 
                 callback(opt) 
             end
         end)
     end
     
+    -- Update list frame size based on content
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+    
     btn.MouseButton1Click:Connect(function()
         if listFrame.Visible then
-            self:Tween(listFrame, {Size = UDim2.new(1, 0, 0, 0)})
-            wait(0.2)
             listFrame.Visible = false
+            listFrame.Size = UDim2.new(1, 0, 0, 0)
         else
             listFrame.Visible = true
-            self:Tween(listFrame, {Size = UDim2.new(1, 0, 0, #options * 28)})
+            -- Show max 5 options at a time with scrolling
+            local maxHeight = math.min(#options * 28, 140)
+            listFrame.Size = UDim2.new(1, 0, 0, maxHeight)
         end
     end)
+    
+    -- Close dropdown when clicking outside
+    local function closeDropdown(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
+            if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
+                listFrame.Visible = false
+                listFrame.Size = UDim2.new(1, 0, 0, 0)
+            end
+        end
+    end
+    
+    UserInputService.InputBegan:Connect(closeDropdown)
     
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
