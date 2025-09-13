@@ -1,4 +1,4 @@
--- LuaUIX Library v2.2 - With Close and Minimize Buttons
+-- LuaUIX Library v2.3 - Fixed Minimize Button
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -212,7 +212,7 @@ function LuaUIX:setupToggleKeybind()
     end)
 end
 
--- Minimize function (like Rayfield)
+-- Minimize function (like Rayfield) - FIXED VERSION
 function LuaUIX:Minimize()
     if self.isMinimized then
         -- Restore window
@@ -223,11 +223,21 @@ function LuaUIX:Minimize()
         self.minimizeButton.Text = "_"
         self.isMinimized = false
     else
-        -- Minimize window
+        -- Minimize window - FIXED POSITION CALCULATION
         self.originalSize = self.window.Size
         self.originalPosition = self.window.Position
+        
+        -- Get current absolute position
+        local absPos = self.window.AbsolutePosition
+        local absSize = self.window.AbsoluteSize
+        
+        -- Calculate new position to keep titlebar in the same screen location
+        local newX = absPos.X / workspace.CurrentCamera.ViewportSize.X
+        local newY = absPos.Y / workspace.CurrentCamera.ViewportSize.Y
+        
         self.window.Size = UDim2.new(0, 200, 0, 40)
-        self.window.Position = UDim2.new(0.5, -100, 0, 10)
+        self.window.Position = UDim2.new(newX, 0, newY, 0)
+        
         self.content.Visible = false
         self.sidebar.Visible = false
         self.minimizeButton.Text = "+"
