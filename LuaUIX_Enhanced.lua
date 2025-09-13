@@ -1,4 +1,5 @@
--- LuaUIX Library v1.6 - Enhanced with New Features
+-- LuaUIX Library v2.0
+-- Fixed and production-ready UI library for Roblox exploits
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
@@ -129,9 +130,6 @@ function LuaUIX.new(menuName)
     
     -- Add keybind to toggle UI
     self:setupToggleKeybind()
-    
-    -- Create watermark
-    self:CreateWatermark("LuaUIX v1.6")
     
     return self
 end
@@ -311,7 +309,7 @@ end
 function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     local btn = createInstance("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = defaultValue and colors.accept or colors.toggleOff,
+        BackgroundColor3 = defaultValue and colors.accent or colors.toggleOff,
         Text = text or "Toggle",
         Font = Enum.Font.Gotham,
         TextSize = 14,
@@ -346,7 +344,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     }
 end
 
--- Create a button with hover effects
+-- Create a button
 function LuaUIX:CreateButton(parent, text, callback, color)
     color = color or colors.button
     local btn = createInstance("TextButton", {
@@ -356,7 +354,6 @@ function LuaUIX:CreateButton(parent, text, callback, color)
         Font = Enum.Font.GothamBold,
         TextSize = 14,
         TextColor3 = colors.text,
-        AutoButtonColor = false,
         Parent = parent
     })
     
@@ -735,143 +732,6 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
             return currentColor
         end
     }
-end
-
--- Notification System
-function LuaUIX:Notify(title, message, duration, notifType)
-    duration = duration or 5
-    notifType = notifType or "info"
-    
-    local notification = createInstance("Frame", {
-        Size = UDim2.new(0, 300, 0, 80),
-        Position = UDim2.new(1, -320, 1, -100),
-        BackgroundColor3 = colors.section,
-        Parent = self.gui
-    })
-    
-    createInstance("UICorner", {CornerRadius = UDim.new(0, 8), Parent = notification})
-    
-    local accentColor
-    if notifType == "success" then
-        accentColor = colors.success
-    elseif notifType == "warning" then
-        accentColor = colors.warning
-    elseif notifType == "error" then
-        accentColor = colors.error
-    else
-        accentColor = colors.accent
-    end
-    
-    local accentBar = createInstance("Frame", {
-        Size = UDim2.new(0, 5, 1, 0),
-        BackgroundColor3 = accentColor,
-        Parent = notification
-    })
-    
-    local titleLabel = createInstance("TextLabel", {
-        Size = UDim2.new(1, -20, 0, 20),
-        Position = UDim2.new(0, 15, 0, 10),
-        BackgroundTransparency = 1,
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = colors.text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = notification
-    })
-    
-    local messageLabel = createInstance("TextLabel", {
-        Size = UDim2.new(1, -20, 0, 40),
-        Position = UDim2.new(0, 15, 0, 35),
-        BackgroundTransparency = 1,
-        Text = message,
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.textSecondary,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextWrapped = true,
-        Parent = notification
-    })
-    
-    -- Auto-remove after duration
-    delay(duration, function()
-        notification:Destroy()
-    end)
-    
-    return notification
-end
-
--- Config System
-function LuaUIX:SaveConfig(name)
-    local config = {
-        windowPosition = {self.window.Position.X.Scale, self.window.Position.X.Offset, 
-                         self.window.Position.Y.Scale, self.window.Position.Y.Offset},
-        settings = {}
-    }
-    
-    -- You would iterate through all UI elements and save their states
-    -- This is a simplified example
-    
-    if writefile then
-        writefile("LuaUIX_" .. name .. ".json", game:GetService("HttpService"):JSONEncode(config))
-        self:Notify("Config Saved", "Configuration '" .. name .. "' has been saved.", 3, "success")
-    else
-        self:Notify("Error", "Config system requires writefile capability.", 3, "error")
-    end
-end
-
-function LuaUIX:LoadConfig(name)
-    if readfile then
-        local success, config = pcall(function()
-            return game:GetService("HttpService"):JSONDecode(readfile("LuaUIX_" .. name .. ".json"))
-        end)
-        
-        if success and config then
-            -- Apply config settings
-            if config.windowPosition then
-                self.window.Position = UDim2.new(
-                    config.windowPosition[1], config.windowPosition[2],
-                    config.windowPosition[3], config.windowPosition[4]
-                )
-            end
-            
-            self:Notify("Config Loaded", "Configuration '" .. name .. "' has been loaded.", 3, "success")
-            return true
-        else
-            self:Notify("Error", "Failed to load config '" .. name .. "'.", 3, "error")
-            return false
-        end
-    else
-        self:Notify("Error", "Config system requires readfile capability.", 3, "error")
-        return false
-    end
-end
-
--- Watermark
-function LuaUIX:CreateWatermark(text)
-    local watermark = createInstance("Frame", {
-        Size = UDim2.new(0, 200, 0, 30),
-        Position = UDim2.new(0, 10, 0, 10),
-        BackgroundColor3 = colors.section,
-        Parent = self.gui
-    })
-    
-    createInstance("UICorner", {CornerRadius = UDim.new(0, 6), Parent = watermark})
-    
-    local label = createInstance("TextLabel", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = text or "LuaUIX v1.6",
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        Parent = watermark
-    })
-    
-    -- Make draggable
-    self:draggable(watermark)
-    
-    return watermark
 end
 
 -- Toggle UI visibility
