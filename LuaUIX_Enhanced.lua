@@ -289,7 +289,6 @@ function LuaUIX:CreatePage(name, icon)
     local tabButton = Create("TextButton", {
         Name = name .. "Tab",
         Size = UDim2.new(1, -20, 0, 40),
-        Position = UDim2.new(0, 10, 0, 10 + (tabCount - 1) * 50),
         BackgroundColor3 = colors.toggleOff,
         Text = icon and (icon .. "  " .. name) or name,
         Font = Enum.Font.GothamBold,
