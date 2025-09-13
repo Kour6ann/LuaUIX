@@ -1,4 +1,4 @@
--- LuaUIX Library v3.0 - Complete Implementation with Theme & Config System
+-- LuaUIX Library v3.0 - Fixed Implementation
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -166,8 +166,6 @@ function LuaUIX.new(menuName)
     self.connections = {}
     self.elements = {}
     self.focusedElement = nil
-    self.configs = {}
-    self.currentConfigName = "default"
     
     -- Animation settings
     self.tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -180,10 +178,6 @@ function LuaUIX.new(menuName)
     
     -- Make UI responsive
     self:MakeResponsive()
-    
-    -- Auto-save/load config
-    self.autoSaveEnabled = true
-    self:SetupAutoConfig()
     
     return self
 end
@@ -397,10 +391,10 @@ function LuaUIX:CreateSection(parent, titleText)
 end
 
 -- Create a toggle
-function LuaUIX:CreateToggle(parent, text, callback, defaultValue, elementId)
+function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     local btn = Create("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = defaultValue and colors.accept or colors.toggleOff,
+        BackgroundColor3 = defaultValue and colors.accent or colors.toggleOff,
         Text = text or "Toggle",
         Font = Enum.Font.Gotham,
         TextSize = 14,
@@ -426,12 +420,9 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue, elementId)
         if callback then 
             callback(state) 
         end
-        if self.autoSaveEnabled then
-            self:SaveConfig(self.currentConfigName)
-        end
     end)
     
-    local elementId = elementId or "toggle_" .. HttpService:GenerateGUID(false)
+    local elementId = "toggle_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetState = function(newState)
             state = newState
@@ -445,7 +436,7 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue, elementId)
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create a button
@@ -493,7 +484,7 @@ function LuaUIX:CreateButton(parent, text, callback, color)
 end
 
 -- Create a slider
-function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision, elementId)
+function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 50),
         BackgroundTransparency = 1,
@@ -567,13 +558,10 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
             if callback then 
                 callback(currentValue) 
             end
-            if self.autoSaveEnabled then
-                self:SaveConfig(self.currentConfigName)
-            end
         end
     end)
     
-    local elementId = elementId or "slider_" .. HttpService:GenerateGUID(false)
+    local elementId = "slider_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetValue = function(value)
             local rel = math.clamp((value - min) / (max - min), 0, 1)
@@ -586,11 +574,11 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create a dropdown
-function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, elementId)
+function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -659,9 +647,6 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, el
             if callback then 
                 callback(opt) 
             end
-            if self.autoSaveEnabled then
-                self:SaveConfig(self.currentConfigName)
-            end
         end)
     end
     
@@ -676,7 +661,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, el
         end
     end)
     
-    local elementId = elementId or "dropdown_" .. HttpService:GenerateGUID(false)
+    local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetOption = function(option)
             if table.find(options, option) then
@@ -689,7 +674,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, el
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create a label
@@ -716,7 +701,7 @@ function LuaUIX:CreateLabel(parent, text, textSize, color)
 end
 
 -- Create a textbox
-function LuaUIX:CreateTextBox(parent, text, callback, placeholder, elementId)
+function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -759,12 +744,9 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder, elementId)
         if enterPressed and callback then 
             callback(textBox.Text) 
         end
-        if self.autoSaveEnabled then
-            self:SaveConfig(self.currentConfigName)
-        end
     end)
     
-    local elementId = elementId or "textbox_" .. HttpService:GenerateGUID(false)
+    local elementId = "textbox_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetText = function(newText)
             textBox.Text = newText
@@ -774,11 +756,11 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder, elementId)
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create a keybind
-function LuaUIX:CreateKeybind(parent, text, defaultKey, callback, elementId)
+function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -840,9 +822,6 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback, elementId)
             currentKey = input.KeyCode
             keyLabel.Text = currentKey.Name
             keyLabel.BackgroundColor3 = colors.accent
-            if self.autoSaveEnabled then
-                self:SaveConfig(self.currentConfigName)
-            end
         end
     end)
     
@@ -858,7 +837,7 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback, elementId)
         table.insert(self.connections, keyConnection)
     end
     
-    local elementId = elementId or "keybind_" .. HttpService:GenerateGUID(false)
+    local elementId = "keybind_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetKey = function(key)
             currentKey = key
@@ -872,11 +851,11 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback, elementId)
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create a color picker
-function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback, elementId)
+function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -923,13 +902,10 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback, elementI
             if callback then
                 callback(currentColor)
             end
-            if self.autoSaveEnabled then
-                self:SaveConfig(self.currentConfigName)
-            end
         end)
     end)
     
-    local elementId = elementId or "colorpicker_" .. HttpService:GenerateGUID(false)
+    local elementId = "colorpicker_" .. HttpService:GenerateGUID(false)
     self.elements[elementId] = {
         SetColor = function(color)
             currentColor = color
@@ -940,7 +916,7 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback, elementI
         end
     }
     
-    return self.elements[elementId], elementId
+    return self.elements[elementId]
 end
 
 -- Create color picker dialog (SIMPLIFIED VERSION)
@@ -1151,292 +1127,6 @@ function LuaUIX:Notify(title, message, duration, notifType)
     return notification
 end
 
--- Config system (REAL IMPLEMENTATION)
-function LuaUIX:SetupAutoConfig()
-    -- Try to load config on startup
-    self:LoadConfig(self.currentConfigName)
-    
-    -- Auto-save when game closes
-    game:BindToClose(function()
-        if self.autoSaveEnabled then
-            self:SaveConfig(self.currentConfigName)
-        end
-    end)
-end
-
-function LuaUIX:SetAutoSave(enabled)
-    self.autoSaveEnabled = enabled
-    self:Notify("Auto-Save", enabled and "Enabled" or "Disabled", 3, "info")
-end
-
-function LuaUIX:ToggleAutoSave()
-    self.autoSaveEnabled = not self.autoSaveEnabled
-    self:Notify("Auto-Save", self.autoSaveEnabled and "Enabled" or "Disabled", 3, "info")
-    return self.autoSaveEnabled
-end
-
-function LuaUIX:SaveConfig(configName)
-    configName = configName or "default"
-    local config = {
-        version = "1.0",
-        timestamp = os.time(),
-        elements = {}
-    }
-    
-    -- Gather all UI element values
-    for elementId, element in pairs(self.elements) do
-        if element.GetState then
-            config.elements[elementId] = {type = "toggle", value = element:GetState()}
-        elseif element.GetValue then
-            config.elements[elementId] = {type = "slider", value = element:GetValue()}
-        elseif element.GetOption then
-            config.elements[elementId] = {type = "dropdown", value = element:GetOption()}
-        elseif element.GetKey then
-            config.elements[elementId] = {type = "keybind", value = element:GetKey().Name}
-        elseif element.GetColor then
-            local color = element:GetColor()
-            config.elements[elementId] = {type = "colorpicker", value = {R = color.R, G = color.G, B = color.B}}
-        elseif element.GetText then
-            config.elements[elementId] = {type = "textbox", value = element:GetText()}
-        end
-    end
-    
-    -- Store theme preference
-    config.theme = self.currentTheme or "Dark"
-    
-    -- Store in memory
-    self.configs[configName] = config
-    
-    -- Simulate saving to file (in real implementation, use writefile)
-    local success, json = pcall(function()
-        return HttpService:JSONEncode(config)
-    end)
-    
-    if success then
-        -- In a real exploit, you would use: writefile("LuaUIX_" .. configName .. ".json", json)
-        print("Config saved:", json)
-        self:Notify("Config", "Configuration '" .. configName .. "' saved!", 3, "success")
-        return true
-    else
-        self:Notify("Error", "Failed to save config: " .. json, 3, "error")
-        return false
-    end
-end
-
-function LuaUIX:LoadConfig(configName)
-    configName = configName or "default"
-    self.currentConfigName = configName
-    
-    -- Check if config exists in memory
-    if self.configs[configName] then
-        self:ApplyConfig(self.configs[configName])
-        self:Notify("Config", "Configuration '" .. configName .. "' loaded!", 3, "success")
-        return true
-    end
-    
-    -- Simulate loading from file (in real implementation, use readfile)
-    local success, configData = pcall(function()
-        -- In a real exploit, you would use: 
-        -- if isfile("LuaUIX_" .. configName .. ".json") then
-        --     return HttpService:JSONDecode(readfile("LuaUIX_" .. configName .. ".json"))
-        -- end
-        return nil
-    end)
-    
-    if success and configData then
-        self.configs[configName] = configData
-        self:ApplyConfig(configData)
-        self:Notify("Config", "Configuration '" .. configName .. "' loaded!", 3, "success")
-        return true
-    else
-        self:Notify("Info", "No saved configuration found. Using defaults.", 3, "info")
-        return false
-    end
-end
-
-function LuaUIX:ApplyConfig(config)
-    -- Apply theme if specified
-    if config.theme then
-        self:SetTheme(config.theme)
-    end
-    
-    -- Apply all element values
-    for elementId, elementData in pairs(config.elements or {}) do
-        if self.elements[elementId] then
-            local element = self.elements[elementId]
-            
-            if elementData.type == "toggle" and element.SetState then
-                element:SetState(elementData.value)
-            elseif elementData.type == "slider" and element.SetValue then
-                element:SetValue(elementData.value)
-            elseif elementData.type == "dropdown" and element.SetOption then
-                element:SetOption(elementData.value)
-            elseif elementData.type == "keybind" and element.SetKey then
-                local keyCode = Enum.KeyCode[elementData.value]
-                if keyCode then
-                    element:SetKey(keyCode)
-                end
-            elseif elementData.type == "colorpicker" and element.SetColor then
-                local colorData = elementData.value
-                element:SetColor(Color3.new(colorData.R, colorData.G, colorData.B))
-            elseif elementData.type == "textbox" and element.SetText then
-                element:SetText(elementData.value)
-            end
-        end
-    end
-end
-
-function LuaUIX:DeleteConfig(configName)
-    configName = configName or "default"
-    
-    if self.configs[configName] then
-        self.configs[configName] = nil
-        -- In real implementation: delfile("LuaUIX_" .. configName .. ".json")
-        self:Notify("Config", "Configuration '" .. configName .. "' deleted!", 3, "info")
-        return true
-    end
-    
-    self:Notify("Info", "Configuration '" .. configName .. "' not found.", 3, "info")
-    return false
-end
-
-function LuaUIX:ListConfigs()
-    local configList = {}
-    for name, _ in pairs(self.configs) do
-        table.insert(configList, name)
-    end
-    return configList
-end
-
--- Theme system (COMPLETE IMPLEMENTATION)
-function LuaUIX:SetTheme(themeName)
-    local themes = {
-        Dark = {
-            background = Color3.fromRGB(33, 34, 44),
-            titlebar = Color3.fromRGB(46, 46, 66),
-            sidebar = Color3.fromRGB(27, 28, 37),
-            content = Color3.fromRGB(40, 42, 54),
-            section = Color3.fromRGB(23, 25, 34),
-            accent = Color3.fromRGB(56, 172, 212),
-            button = Color3.fromRGB(90, 120, 255),
-            toggleOff = Color3.fromRGB(42, 46, 59),
-            text = Color3.fromRGB(255, 255, 255),
-            textSecondary = Color3.fromRGB(200, 200, 200),
-            success = Color3.fromRGB(76, 175, 80),
-            warning = Color3.fromRGB(255, 193, 7),
-            error = Color3.fromRGB(244, 67, 54),
-            close = Color3.fromRGB(244, 67, 54),
-            minimize = Color3.fromRGB(255, 193, 7),
-            info = Color3.fromRGB(33, 150, 243)
-        },
-        Light = {
-            background = Color3.fromRGB(240, 240, 240),
-            titlebar = Color3.fromRGB(220, 220, 220),
-            sidebar = Color3.fromRGB(200, 200, 200),
-            content = Color3.fromRGB(250, 250, 250),
-            section = Color3.fromRGB(230, 230, 230),
-            accent = Color3.fromRGB(56, 172, 212),
-            button = Color3.fromRGB(90, 120, 255),
-            toggleOff = Color3.fromRGB(180, 180, 180),
-            text = Color3.fromRGB(30, 30, 30),
-            textSecondary = Color3.fromRGB(80, 80, 80),
-            success = Color3.fromRGB(76, 175, 80),
-            warning = Color3.fromRGB(255, 193, 7),
-            error = Color3.fromRGB(244, 67, 54),
-            close = Color3.fromRGB(244, 67, 54),
-            minimize = Color3.fromRGB(255, 193, 7),
-            info = Color3.fromRGB(33, 150, 243)
-        },
-        Blue = {
-            background = Color3.fromRGB(25, 35, 65),
-            titlebar = Color3.fromRGB(35, 55, 95),
-            sidebar = Color3.fromRGB(20, 30, 55),
-            content = Color3.fromRGB(30, 45, 75),
-            section = Color3.fromRGB(15, 25, 45),
-            accent = Color3.fromRGB(0, 150, 255),
-            button = Color3.fromRGB(0, 120, 215),
-            toggleOff = Color3.fromRGB(40, 55, 85),
-            text = Color3.fromRGB(255, 255, 255),
-            textSecondary = Color3.fromRGB(200, 210, 220),
-            success = Color3.fromRGB(76, 175, 80),
-            warning = Color3.fromRGB(255, 193, 7),
-            error = Color3.fromRGB(244, 67, 54),
-            close = Color3.fromRGB(244, 67, 54),
-            minimize = Color3.fromRGB(255, 193, 7),
-            info = Color3.fromRGB(33, 150, 243)
-        },
-        Green = {
-            background = Color3.fromRGB(35, 45, 35),
-            titlebar = Color3.fromRGB(45, 65, 45),
-            sidebar = Color3.fromRGB(25, 35, 25),
-            content = Color3.fromRGB(40, 50, 40),
-            section = Color3.fromRGB(20, 30, 20),
-            accent = Color3.fromRGB(76, 175, 80),
-            button = Color3.fromRGB(90, 160, 90),
-            toggleOff = Color3.fromRGB(50, 60, 50),
-            text = Color3.fromRGB(255, 255, 255),
-            textSecondary = Color3.fromRGB(200, 210, 200),
-            success = Color3.fromRGB(76, 175, 80),
-            warning = Color3.fromRGB(255, 193, 7),
-            error = Color3.fromRGB(244, 67, 54),
-            close = Color3.fromRGB(244, 67, 54),
-            minimize = Color3.fromRGB(255, 193, 7),
-            info = Color3.fromRGB(33, 150, 243)
-        }
-    }
-    
-    if themes[themeName] then
-        self.colors = themes[themeName]
-        self.currentTheme = themeName
-        self:ApplyTheme()
-        self:Notify("Theme", "Theme changed to " .. themeName, 3, "info")
-        
-        -- Save theme preference if auto-save is enabled
-        if self.autoSaveEnabled then
-            self:SaveConfig(self.currentConfigName)
-        end
-        
-        return true
-    else
-        self:Notify("Error", "Theme '" .. themeName .. "' not found!", 3, "error")
-        return false
-    end
-end
-
-function LuaUIX:ApplyTheme()
-    -- Apply current theme colors to all UI elements
-    self.window.BackgroundColor3 = self.colors.background
-    self.titlebar.BackgroundColor3 = self.colors.titlebar
-    self.sidebar.BackgroundColor3 = self.colors.sidebar
-    self.content.BackgroundColor3 = self.colors.content
-    self.title.TextColor3 = self.colors.text
-    
-    -- Apply to tab buttons
-    for _, button in pairs(self.tabButtons) do
-        if button.BackgroundColor3 == colors.accent then
-            button.BackgroundColor3 = self.colors.accent
-        else
-            button.BackgroundColor3 = self.colors.toggleOff
-        end
-        button.TextColor3 = self.colors.text
-    end
-    
-    -- Apply to close and minimize buttons
-    self.closeButton.BackgroundColor3 = self.colors.close
-    self.minimizeButton.BackgroundColor3 = self.colors.minimize
-    
-    -- Note: In a complete implementation, you would update all other elements too
-    -- This would require storing references to all created elements and updating them
-end
-
-function LuaUIX:GetAvailableThemes()
-    return {"Dark", "Light", "Blue", "Green"}
-end
-
-function LuaUIX:GetCurrentTheme()
-    return self.currentTheme or "Dark"
-end
-
 -- Focus management
 function LuaUIX:SetFocusedElement(element)
     self.focusedElement = element
@@ -1467,11 +1157,6 @@ end
 
 -- Destroy UI
 function LuaUIX:Destroy()
-    -- Save config before closing if auto-save is enabled
-    if self.autoSaveEnabled then
-        self:SaveConfig(self.currentConfigName)
-    end
-    
     -- Disconnect all connections
     for _, connection in ipairs(self.connections) do
         if connection.Connected then
