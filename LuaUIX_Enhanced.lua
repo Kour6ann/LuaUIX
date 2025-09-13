@@ -253,7 +253,7 @@ function LuaUIX:Minimize()
     end
 end
 
--- Create a new page (FIXED VERSION)
+-- Create a new page
 function LuaUIX:CreatePage(name, icon)
     local page = Create("ScrollingFrame", {
         Name = name,
@@ -280,10 +280,16 @@ function LuaUIX:CreatePage(name, icon)
     
     self.pages[name] = page
     
-    -- Create tab button with proper layout
+    -- Create tab button
+    local tabCount = 0
+    for _ in pairs(self.pages) do
+        tabCount = tabCount + 1
+    end
+    
     local tabButton = Create("TextButton", {
         Name = name .. "Tab",
         Size = UDim2.new(1, -20, 0, 40),
+        Position = UDim2.new(0, 10, 0, 10 + (tabCount - 1) * 50),
         BackgroundColor3 = colors.toggleOff,
         Text = icon and (icon .. "  " .. name) or name,
         Font = Enum.Font.GothamBold,
@@ -294,23 +300,6 @@ function LuaUIX:CreatePage(name, icon)
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = tabButton})
     
-    -- Use UIListLayout for proper tab positioning
-    if not self.sidebar:FindFirstChild("TabLayout") then
-        Create("UIListLayout", {
-            Name = "TabLayout",
-            Padding = UDim.new(0, 10),
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Parent = self.sidebar
-        })
-        
-        Create("UIPadding", {
-            PaddingTop = UDim.new(0, 10),
-            PaddingLeft = UDim.new(0, 10),
-            PaddingRight = UDim.new(0, 10),
-            Parent = self.sidebar
-        })
-    end
-    
     tabButton.MouseButton1Click:Connect(function()
         self:ShowPage(name)
     end)
@@ -318,27 +307,27 @@ function LuaUIX:CreatePage(name, icon)
     self.tabButtons[name] = tabButton
     
     -- Show first page by default
-    if not self.currentPage then
+    if tabCount == 1 then
         self:ShowPage(name)
     end
     
     return page
 end
 
--- Show a specific page (FIXED VERSION)
+-- Show a specific page
 function LuaUIX:ShowPage(name)
     if self.currentPage then
         self.currentPage.Visible = false
-        -- Reset all tab button colors
+        -- Reset tab button color
         for pageName, button in pairs(self.tabButtons) do
-            self:Tween(button, {BackgroundColor3 = colors.toggleOff})
+            button.BackgroundColor3 = colors.toggleOff
         end
     end
     
     if self.pages[name] then
         self.pages[name].Visible = true
         self.currentPage = self.pages[name]
-        -- Highlight active tab
+        -- Highlight active tab with animation
         self:Tween(self.tabButtons[name], {BackgroundColor3 = colors.accent})
     end
 end
