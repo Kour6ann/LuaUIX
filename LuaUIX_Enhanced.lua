@@ -1,4 +1,4 @@
--- LuaUIX Library v3.0 - Fixed Implementation
+-- LuaUIX Library v1.0 - Fixed Implementation
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
