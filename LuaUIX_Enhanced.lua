@@ -1048,7 +1048,7 @@ function LuaUIX:AddTooltip(element, text)
     end)
 end
 
--- NEW NOTIFICATION FUNCTION (COPY THIS)
+-- Notification system with proper padding
 function LuaUIX:Notify(title, message, duration, notifType)
     duration = duration or 5
     notifType = notifType or "info"
@@ -1057,65 +1057,67 @@ function LuaUIX:Notify(title, message, duration, notifType)
     if not self.notificationContainer then
         self.notificationContainer = Create("Frame", {
             Name = "NotificationContainer",
-            Size = UDim2.new(0, 320, 1, 0),
-            Position = UDim2.new(1, -340, 0, 0),
+            Size = UDim2.new(0, 340, 1, 0),
+            Position = UDim2.new(1, -360, 0, 0),
             BackgroundTransparency = 1,
             Parent = self.gui
         })
         
         Create("UIListLayout", {
             SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 10),
+            Padding = UDim.new(0, 12),
             HorizontalAlignment = Enum.HorizontalAlignment.Right,
             VerticalAlignment = Enum.VerticalAlignment.Bottom,
             Parent = self.notificationContainer
         })
         
         Create("UIPadding", {
-            PaddingBottom = UDim.new(0, 20),
-            PaddingRight = UDim.new(0, 20),
+            PaddingBottom = UDim.new(0, 25),
+            PaddingRight = UDim.new(0, 25),
             Parent = self.notificationContainer
         })
     end
     
     local notification = Create("Frame", {
         Name = "Notification",
-        Size = UDim2.new(0, 300, 0, 0),
+        Size = UDim2.new(0, 320, 0, 0),
         BackgroundColor3 = colors.section,
         AutomaticSize = Enum.AutomaticSize.Y,
-        LayoutOrder = 999999, -- Push to bottom
+        LayoutOrder = 999999,
         Parent = self.notificationContainer
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = notification})
+    Create("UICorner", {CornerRadius = UDim.new(0, 10), Parent = notification})
     
-    -- Add consistent padding to notifications
+    -- PROPER PADDING: 12px top/bottom, 15px left/right
     Create("UIPadding", {
-        PaddingTop = UDim.new(0, 10),
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        PaddingBottom = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 12),
+        PaddingLeft = UDim.new(0, 15),
+        PaddingRight = UDim.new(0, 15),
+        PaddingBottom = UDim.new(0, 12),
         Parent = notification
     })
     
+    -- Title with proper spacing
     local titleLabel = Create("TextLabel", {
-        Size = UDim2.new(1, -20, 0, 20),
+        Size = UDim2.new(1, 0, 0, 22),
         BackgroundTransparency = 1,
         Text = title,
         Font = Enum.Font.GothamBold,
-        TextSize = 14,
+        TextSize = 15,
         TextColor3 = colors.text,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = notification
     })
     
+    -- Message with proper spacing from title
     local messageLabel = Create("TextLabel", {
-        Size = UDim2.new(1, -20, 0, 0),
-        Position = UDim2.new(0, 0, 0, 25),
+        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.new(0, 0, 0, 27), -- Space below title
         BackgroundTransparency = 1,
         Text = message,
         Font = Enum.Font.Gotham,
-        TextSize = 12,
+        TextSize = 13,
         TextColor3 = colors.textSecondary,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1123,7 +1125,8 @@ function LuaUIX:Notify(title, message, duration, notifType)
         Parent = notification
     })
     
-    notification.Size = UDim2.new(0, 300, 0, messageLabel.TextBounds.Y + 35)
+    -- Set size based on content with proper padding
+    notification.Size = UDim2.new(0, 320, 0, messageLabel.TextBounds.Y + 45) -- 12+12+21 padding
     
     -- Set color based on notification type
     local color = colors.info
@@ -1131,13 +1134,24 @@ function LuaUIX:Notify(title, message, duration, notifType)
     elseif notifType == "warning" then color = colors.warning
     elseif notifType == "error" then color = colors.error end
     
+    -- Accent bar with proper positioning
     local accentBar = Create("Frame", {
-        Size = UDim2.new(0, 5, 1, 0),
+        Size = UDim2.new(0, 6, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = color,
         Parent = notification
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = accentBar})
+    Create("UICorner", {
+        CornerRadius = UDim.new(0, 10),
+        Parent = accentBar
+    })
+    
+    -- Adjust text position to account for accent bar
+    titleLabel.Position = UDim2.new(0, 10, 0, 0) -- Move right to avoid accent bar
+    titleLabel.Size = UDim2.new(1, -10, 0, 22)
+    messageLabel.Position = UDim2.new(0, 10, 0, 27)
+    messageLabel.Size = UDim2.new(1, -10, 0, 0)
     
     -- Animate in from the right
     notification.Position = UDim2.new(1, 0, 0, 0)
