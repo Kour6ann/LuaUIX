@@ -1,4 +1,4 @@
--- LuaUIX Library v2.0
+-- LuaUIX Library v2.0 - Fixed UI Toggle Function
 -- Fixed and production-ready UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -305,7 +305,7 @@ function LuaUIX:CreateSection(parent, titleText)
     return section
 end
 
--- Create a toggle
+-- Create a toggle - FIXED VERSION
 function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     local btn = createInstance("TextButton", {
         Size = UDim2.new(1, 0, 0, 30),
@@ -337,6 +337,9 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
         SetState = function(newState)
             state = newState
             btn.BackgroundColor3 = state and colors.accent or colors.toggleOff
+            if callback then 
+                callback(state) 
+            end
         end,
         GetState = function()
             return state
@@ -455,6 +458,9 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
             sliderFill.Size = UDim2.new(rel, 0, 1, 0)
             currentValue = value
             label.Text = text .. ": " .. currentValue
+            if callback then 
+                callback(currentValue) 
+            end
         end,
         GetValue = function()
             return currentValue
@@ -534,6 +540,9 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             if table.find(options, option) then
                 btn.Text = text .. ": " .. option
                 currentOption = option
+                if callback then 
+                    callback(option) 
+                end
             end
         end,
         GetOption = function()
@@ -583,8 +592,8 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
         Parent = frame
     })
     
-    textBox.FocusLost:Connect(function()
-        if callback then 
+    textBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed and callback then 
             callback(textBox.Text) 
         end
     end)
@@ -727,6 +736,9 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
         SetColor = function(color)
             currentColor = color
             colorBox.BackgroundColor3 = color
+            if callback then
+                callback(color)
+            end
         end,
         GetColor = function()
             return currentColor
@@ -734,9 +746,18 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     }
 end
 
--- Toggle UI visibility
+-- Toggle UI visibility - FIXED VERSION
 function LuaUIX:ToggleVisibility()
     self.gui.Enabled = not self.gui.Enabled
+    -- Ensure the window stays on top when toggled back on
+    if self.gui.Enabled then
+        self.window.ZIndex = 10
+        for _, child in ipairs(self.gui:GetDescendants()) do
+            if child:IsA("GuiObject") then
+                child.ZIndex = child.ZIndex + 10
+            end
+        end
+    end
 end
 
 -- Destroy UI
