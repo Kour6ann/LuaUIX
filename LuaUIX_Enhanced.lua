@@ -1,4 +1,4 @@
--- LuaUIX Library v2.1 - Fixed Version
+-- LuaUIX Library v2.2 - With Close and Minimize Buttons
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -8,6 +8,7 @@ LuaUIX.__index = LuaUIX
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 -- Utility functions
 local function Create(className, properties)
@@ -32,7 +33,9 @@ local colors = {
     textSecondary = Color3.fromRGB(200, 200, 200),
     success = Color3.fromRGB(76, 175, 80),
     warning = Color3.fromRGB(255, 193, 7),
-    error = Color3.fromRGB(244, 67, 54)
+    error = Color3.fromRGB(244, 67, 54),
+    close = Color3.fromRGB(244, 67, 54),
+    minimize = Color3.fromRGB(255, 193, 7)
 }
 
 -- Library initialization
@@ -74,7 +77,7 @@ function LuaUIX.new(menuName)
     
     self.title = Create("TextLabel", {
         Name = "Title",
-        Size = UDim2.new(1, -10, 1, 0),
+        Size = UDim2.new(1, -70, 1, 0),
         Position = UDim2.new(0, 10, 0, 0),
         BackgroundTransparency = 1,
         Text = menuName or "LuaUIX Window",
@@ -84,6 +87,44 @@ function LuaUIX.new(menuName)
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = self.titlebar
     })
+    
+    -- Create close button
+    self.closeButton = Create("TextButton", {
+        Name = "CloseButton",
+        Size = UDim2.new(0, 25, 0, 25),
+        Position = UDim2.new(1, -30, 0.5, -12.5),
+        BackgroundColor3 = colors.close,
+        Text = "X",
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        Parent = self.titlebar
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = self.closeButton})
+    
+    self.closeButton.MouseButton1Click:Connect(function()
+        self:Destroy()
+    end)
+    
+    -- Create minimize button
+    self.minimizeButton = Create("TextButton", {
+        Name = "MinimizeButton",
+        Size = UDim2.new(0, 25, 0, 25),
+        Position = UDim2.new(1, -60, 0.5, -12.5),
+        BackgroundColor3 = colors.minimize,
+        Text = "_",
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        Parent = self.titlebar
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = self.minimizeButton})
+    
+    self.minimizeButton.MouseButton1Click:Connect(function()
+        self:Minimize()
+    end)
     
     -- Create sidebar
     self.sidebar = Create("Frame", {
@@ -111,6 +152,9 @@ function LuaUIX.new(menuName)
     self.pages = {}
     self.currentPage = nil
     self.tabButtons = {}
+    self.isMinimized = false
+    self.originalSize = UDim2.new(0, 650, 0, 500)
+    self.originalPosition = UDim2.new(0.5, -325, 0.5, -250)
     
     -- Add draggable functionality
     self:draggable(self.titlebar)
@@ -166,6 +210,29 @@ function LuaUIX:setupToggleKeybind()
             self:ToggleVisibility()
         end
     end)
+end
+
+-- Minimize function (like Rayfield)
+function LuaUIX:Minimize()
+    if self.isMinimized then
+        -- Restore window
+        self.window.Size = self.originalSize
+        self.window.Position = self.originalPosition
+        self.content.Visible = true
+        self.sidebar.Visible = true
+        self.minimizeButton.Text = "_"
+        self.isMinimized = false
+    else
+        -- Minimize window
+        self.originalSize = self.window.Size
+        self.originalPosition = self.window.Position
+        self.window.Size = UDim2.new(0, 200, 0, 40)
+        self.window.Position = UDim2.new(0.5, -100, 0, 10)
+        self.content.Visible = false
+        self.sidebar.Visible = false
+        self.minimizeButton.Text = "+"
+        self.isMinimized = true
+    end
 end
 
 -- Create a new page
