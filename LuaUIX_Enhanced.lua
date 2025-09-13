@@ -1,4 +1,4 @@
--- LuaUIX Library v2.3 - Fixed Minimize Button
+-- LuaUIX Library v2.4 - Fixed Layout Issues
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -8,7 +8,6 @@ LuaUIX.__index = LuaUIX
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 
 -- Utility functions
 local function Create(className, properties)
@@ -212,7 +211,7 @@ function LuaUIX:setupToggleKeybind()
     end)
 end
 
--- Minimize function (like Rayfield) - FIXED VERSION
+-- Minimize function (like Rayfield)
 function LuaUIX:Minimize()
     if self.isMinimized then
         -- Restore window
@@ -223,7 +222,7 @@ function LuaUIX:Minimize()
         self.minimizeButton.Text = "_"
         self.isMinimized = false
     else
-        -- Minimize window - FIXED POSITION CALCULATION
+        -- Minimize window
         self.originalSize = self.window.Size
         self.originalPosition = self.window.Position
         
@@ -257,20 +256,33 @@ function LuaUIX:CreatePage(name, icon)
         Parent = self.content
     })
     
-    Create("UIListLayout", {
+    -- Create a container for the page content
+    local container = Create("Frame", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Parent = page
+    })
+    
+    -- Use UIListLayout for proper layout
+    local layout = Create("UIListLayout", {
         Padding = UDim.new(0, 10),
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = page
+        Parent = container
     })
     
     Create("UIPadding", {
         PaddingTop = UDim.new(0, 10),
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10),
-        Parent = page
+        Parent = container
     })
     
-    self.pages[name] = page
+    -- Update canvas size when layout changes
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+    end)
+    
+    self.pages[name] = container
     
     -- Create tab button
     local tabCount = 0
@@ -303,13 +315,13 @@ function LuaUIX:CreatePage(name, icon)
         self:ShowPage(name)
     end
     
-    return page
+    return container
 end
 
 -- Show a specific page
 function LuaUIX:ShowPage(name)
     if self.currentPage then
-        self.currentPage.Visible = false
+        self.currentPage.Parent.Visible = false
         -- Reset tab button color
         for pageName, button in pairs(self.tabButtons) do
             button.BackgroundColor3 = colors.toggleOff
@@ -317,7 +329,7 @@ function LuaUIX:ShowPage(name)
     end
     
     if self.pages[name] then
-        self.pages[name].Visible = true
+        self.pages[name].Parent.Visible = true
         self.currentPage = self.pages[name]
         -- Highlight active tab
         self.tabButtons[name].BackgroundColor3 = colors.accent
@@ -343,7 +355,7 @@ function LuaUIX:CreateSection(parent, titleText)
         Parent = section
     })
     
-    Create("UIListLayout", {
+    local layout = Create("UIListLayout", {
         Padding = UDim.new(0, 6),
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = section
@@ -532,7 +544,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Size = UDim2.new(1, 0, 0, #options * 28),
         BackgroundColor3 = Color3.fromRGB(30, 32, 44),
         Visible = false,
-        Parent = parent
+        Parent = parent.Parent -- Parent to the page instead of section
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
@@ -567,6 +579,8 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     
     btn.MouseButton1Click:Connect(function()
         listFrame.Visible = not listFrame.Visible
+        -- Position the dropdown below the button
+        listFrame.Position = UDim2.new(0, frame.AbsolutePosition.X - parent.Parent.AbsolutePosition.X, 0, frame.AbsolutePosition.Y - parent.Parent.AbsolutePosition.Y + 30)
     end)
     
     return {
