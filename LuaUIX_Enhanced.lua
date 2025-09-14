@@ -671,10 +671,9 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- FIXED DROPDOWN IMPLEMENTATION - PROPER STATE MANAGEMENT
+-- FIXED DROPDOWN WITH PROPER CONNECTION MANAGEMENT
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
-    local elementConnections = {}
     
     local frame = Create("Frame", {
         Name = "DropdownFrame",
@@ -701,15 +700,12 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = btn
     })
     
-    -- Use self.elements to store state instead of local variable
-    self.elements[elementId] = {
+    -- Create element state
+    local elementState = {
         currentOption = defaultValue,
         optionButtons = {},
-        frame = frame,
-        btn = btn
+        connections = {}
     }
-    
-    local element = self.elements[elementId]
     
     -- Create dropdown list
     local listFrame = Create("Frame", {
@@ -750,7 +746,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         })
         
         -- Store button reference
-        element.optionButtons[opt] = optBtn
+        elementState.optionButtons[opt] = optBtn
         
         -- Highlight if this is the default option
         if opt == defaultValue then
@@ -759,37 +755,35 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         end
         
         -- Hover effects
-        optBtn.MouseEnter:Connect(function()
-            if opt ~= element.currentOption then
+        local enterConn = optBtn.MouseEnter:Connect(function()
+            if opt ~= elementState.currentOption then
                 optBtn.BackgroundColor3 = Color3.fromRGB(50, 52, 64)
             end
         end)
         
-        optBtn.MouseLeave:Connect(function()
-            if opt ~= element.currentOption then
+        local leaveConn = optBtn.MouseLeave:Connect(function()
+            if opt ~= elementState.currentOption then
                 optBtn.BackgroundTransparency = 1
                 optBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
             end
         end)
         
         -- CLICK EVENT
-        optBtn.MouseButton1Click:Connect(function()
+        local clickConn = optBtn.MouseButton1Click:Connect(function()
             print("Option clicked:", opt)
             
-            -- Update current option in the element state
-            element.currentOption = opt
+            -- Update current option
+            elementState.currentOption = opt
             
             -- Update main button text
-            element.btn.Text = text .. ": " .. opt
+            btn.Text = text .. ": " .. opt
             
             -- Update visual highlighting
-            for optionName, button in pairs(element.optionButtons) do
+            for optionName, button in pairs(elementState.optionButtons) do
                 if optionName == opt then
-                    -- Highlight selected option
                     button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
                     button.TextColor3 = colors.accent
                 else
-                    -- Reset other options
                     button.BackgroundTransparency = 1
                     button.TextColor3 = Color3.fromRGB(220, 220, 220)
                 end
@@ -803,40 +797,48 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
                 callback(opt) 
             end
         end)
+        
+        -- Store connections
+        table.insert(elementState.connections, enterConn)
+        table.insert(elementState.connections, leaveConn)
+        table.insert(elementState.connections, clickConn)
     end
     
     -- Update list frame size
-    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local sizeConn = listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         listFrame.Size = UDim2.new(1, 0, 0, math.min(listLayout.AbsoluteContentSize.Y, 140))
     end)
+    table.insert(elementState.connections, sizeConn)
     
     -- Main dropdown toggle
-    btn.MouseButton1Click:Connect(function()
+    local toggleConn = btn.MouseButton1Click:Connect(function()
         listFrame.Visible = not listFrame.Visible
     end)
+    table.insert(elementState.connections, toggleConn)
     
     -- Close when clicking outside
-    local closeConnection
-    closeConnection = UserInputService.InputBegan:Connect(function(input)
+    local closeConnection = UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
             if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
                 listFrame.Visible = false
             end
         end
     end)
-    
     table.insert(self.connections, closeConnection)
     
-    -- Return methods that access the element state
+    -- Store element state
+    self.elements[elementId] = elementState
+    
+    -- Return methods
     return {
         SetOption = function(option)
             if table.find(options, option) then
                 print("SetOption called with:", option)
-                element.currentOption = option
-                element.btn.Text = text .. ": " .. option
+                elementState.currentOption = option
+                btn.Text = text .. ": " .. option
                 
                 -- Update visual highlighting
-                for opt, button in pairs(element.optionButtons) do
+                for opt, button in pairs(elementState.optionButtons) do
                     if opt == option then
                         button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
                         button.TextColor3 = colors.accent
@@ -852,10 +854,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             end
         end,
         GetOption = function()
-            print("GetOption returning:", element.currentOption)
-            return element.currentOption
+            print("GetOption returning:", elementState.currentOption)
+            return elementState.currentOption
         end,
         Destroy = function()
+            -- Disconnect all connections safely
+            for _, conn in ipairs(elementState.connections) do
+                if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                    conn:Disconnect()
+                end
+            end
             frame:Destroy()
             self.elements[elementId] = nil
         end
