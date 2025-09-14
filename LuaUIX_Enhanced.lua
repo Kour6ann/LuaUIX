@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- Fixed Dropdown Implementation with proper z-index management
+-- Fixed Dropdown Implementation
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     local elementConnections = {}
@@ -745,8 +745,8 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         })
         
         table.insert(elementConnections, optBtn.MouseButton1Click:Connect(function()
-            btn.Text = text .. ": " .. opt
             currentOption = opt
+            btn.Text = text .. ": " .. opt  -- FIXED: Update the button text
             listFrame.Visible = false
             listFrame.Size = UDim2.new(0, 0, 0, 0)
             if callback then 
@@ -804,8 +804,8 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     self.elements[elementId] = {
         SetOption = function(option)
             if table.find(options, option) then
-                btn.Text = text .. ": " .. option
                 currentOption = option
+                btn.Text = text .. ": " .. option  -- FIXED: Update button text
             end
         end,
         GetOption = function()
