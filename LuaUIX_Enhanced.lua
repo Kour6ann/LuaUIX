@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- Fixed Dropdown Implementation
+-- COMPLETELY FIXED Dropdown Implementation
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     local elementConnections = {}
@@ -695,23 +695,20 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = frame
     })
     
-    -- Add consistent padding to dropdown buttons
     Create("UIPadding", {
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10),
         Parent = btn
     })
     
-    -- Parent listFrame to GUI instead of parent to avoid clipping issues
+    -- Create dropdown list but don't parent it yet
     local listFrame = Create("ScrollingFrame", {
         Size = UDim2.new(0, frame.AbsoluteSize.X, 0, 0),
-        Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y),
         BackgroundColor3 = Color3.fromRGB(30, 32, 44),
         Visible = false,
         ScrollBarThickness = 6,
         ScrollBarImageColor3 = colors.accent,
-        ZIndex = 10, -- Ensure it appears above other elements
-        Parent = self.gui
+        ZIndex = 10,
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
@@ -733,11 +730,10 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             TextSize = 14,
             TextColor3 = Color3.fromRGB(220, 220, 220),
             LayoutOrder = _,
-            ZIndex = 11, -- Higher than listFrame
+            ZIndex = 11,
             Parent = listFrame
         })
         
-        -- Add consistent padding to dropdown options
         Create("UIPadding", {
             PaddingLeft = UDim.new(0, 10),
             PaddingRight = UDim.new(0, 10),
@@ -746,16 +742,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         
         table.insert(elementConnections, optBtn.MouseButton1Click:Connect(function()
             currentOption = opt
-            btn.Text = text .. ": " .. opt  -- FIXED: Update the button text
+            btn.Text = text .. ": " .. opt
             listFrame.Visible = false
-            listFrame.Size = UDim2.new(0, 0, 0, 0)
+            listFrame.Parent = nil
             if callback then 
                 callback(opt) 
             end
         end))
     end
     
-    -- Update list frame size based on content
+    -- Update list frame size
     listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end)
@@ -763,16 +759,15 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     table.insert(elementConnections, btn.MouseButton1Click:Connect(function()
         if listFrame.Visible then
             listFrame.Visible = false
-            listFrame.Size = UDim2.new(0, 0, 0, 0)
+            listFrame.Parent = nil
         else
-            listFrame.Visible = true
-            -- Update position in case parent moved
+            -- Position and parent the list frame
             listFrame.Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y)
-            listFrame.Size = UDim2.new(0, frame.AbsoluteSize.X, 0, 0)
+            listFrame.Parent = self.gui
+            listFrame.Visible = true
             
-            -- Show max 5 options at a time with scrolling
             local maxHeight = math.min(#options * 28, 140)
-            self:Tween(listFrame, {Size = UDim2.new(0, frame.AbsoluteSize.X, 0, maxHeight)})
+            listFrame.Size = UDim2.new(0, frame.AbsoluteSize.X, 0, maxHeight)
         end
     end))
     
@@ -781,7 +776,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
             if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
                 listFrame.Visible = false
-                listFrame.Size = UDim2.new(0, 0, 0, 0)
+                listFrame.Parent = nil
             end
         end
     end
@@ -790,22 +785,11 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     table.insert(self.connections, closeConnection)
     table.insert(elementConnections, closeConnection)
     
-    -- Update dropdown position when window moves
-    local positionConnection = RunService.Heartbeat:Connect(function()
-        if listFrame.Visible then
-            listFrame.Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y)
-            listFrame.Size = UDim2.new(0, frame.AbsoluteSize.X, 0, listFrame.AbsoluteSize.Y)
-        end
-    end)
-    
-    table.insert(self.connections, positionConnection)
-    table.insert(elementConnections, positionConnection)
-    
     self.elements[elementId] = {
         SetOption = function(option)
             if table.find(options, option) then
                 currentOption = option
-                btn.Text = text .. ": " .. option  -- FIXED: Update button text
+                btn.Text = text .. ": " .. option
             end
         end,
         GetOption = function()
@@ -817,8 +801,10 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
                     conn:Disconnect()
                 end
             end
+            if listFrame then
+                listFrame:Destroy()
+            end
             frame:Destroy()
-            listFrame:Destroy()
             self.elements[elementId] = nil
         end
     }
