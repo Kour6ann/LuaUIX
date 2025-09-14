@@ -1,5 +1,5 @@
--- LuaUIX Library v2.0 - With Icon Support
--- A reliable UI library for Roblox exploits with Lucide Dev icons
+-- LuaUIX Library v2.0 - Simplified Working Version
+-- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
 LuaUIX.__index = LuaUIX
@@ -7,12 +7,8 @@ LuaUIX.__index = LuaUIX
 -- Services
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
-
--- Load AshLibs Lucide icon table
-local icons = loadstring(game:HttpGet("https://raw.githubusercontent.com/YourRepo/LuaUIX/main/icons.lua"))()
 
 -- Utility functions
 local function Create(className, properties)
@@ -43,28 +39,8 @@ local colors = {
     info = Color3.fromRGB(33, 150, 243)
 }
 
--- Returns an ImageLabel for a Lucide icon
-function LuaUIX:GetIcon(name, size)
-    size = size or "48px"
-    local data = icons[size][name]
-    if not data then 
-        warn("Icon not found: " .. name)
-        return nil 
-    end
-    
-    local assetId, rectSize, rectOffset = data[1], data[2], data[3]
-    
-    local icon = Instance.new("ImageLabel")
-    icon.BackgroundTransparency = 1
-    icon.Size = UDim2.fromOffset(rectSize[1], rectSize[2])
-    icon.Image = "rbxassetid://" .. tostring(assetId)
-    icon.ImageRectSize = Vector2.new(rectSize[1], rectSize[2])
-    icon.ImageRectOffset = Vector2.new(rectOffset[1], rectOffset[2])
-    return icon
-end
-
 -- Library initialization
-function LuaUIX.new(menuName)
+function LuaUIX:CreateLib(menuName)
     local self = setmetatable({}, LuaUIX)
     
     -- Cleanup existing UI
@@ -199,9 +175,6 @@ function LuaUIX.new(menuName)
     -- Add keybind to toggle UI
     self:setupToggleKeybind()
     
-    -- Make UI responsive
-    self:MakeResponsive()
-    
     return self
 end
 
@@ -311,8 +284,8 @@ function LuaUIX:CreatePage(name)
     return page
 end
 
--- Kavo-style API implementation with icon support
-function LuaUIX:NewTab(name, icon)
+-- Kavo-style API implementation
+function LuaUIX:NewTab(name)
     local page = self:CreatePage(name)
     
     -- Create tab button
@@ -341,28 +314,6 @@ function LuaUIX:NewTab(name, icon)
         PaddingRight = UDim.new(0, 10),
         Parent = tabButton
     })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "24px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -12)
-                iconObj.Parent = tabButton
-                tabButton.Text = "   " .. name
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(20, 20)
-            img.Position = UDim2.new(0, 10, 0.5, -10)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = tabButton
-            tabButton.Text = "   " .. name
-        end
-    end
     
     tabButton.MouseButton1Click:Connect(function()
         self:ShowTab(name)
@@ -461,64 +412,64 @@ function LuaUIX:CreateSection(parent, title)
     local sectionObj = {}
     sectionObj.Frame = section
     
-    function sectionObj:NewButton(text, callback, icon)
-        return self:CreateButton(section, text, callback, nil, icon)
+    function sectionObj:NewButton(text, callback)
+        return self:CreateButton(section, text, callback)
     end
     
-    function sectionObj:NewToggle(text, callback, defaultValue, icon)
-        return self:CreateToggle(section, text, callback, defaultValue, icon)
+    function sectionObj:NewToggle(text, callback, defaultValue)
+        return self:CreateToggle(section, text, callback, defaultValue)
     end
     
-    function sectionObj:NewSlider(text, min, max, callback, defaultValue, precision, icon)
-        return self:CreateSlider(section, text, min, max, callback, defaultValue, precision, icon)
+    function sectionObj:NewSlider(text, min, max, callback, defaultValue, precision)
+        return self:CreateSlider(section, text, min, max, callback, defaultValue, precision)
     end
     
-    function sectionObj:NewDropdown(text, options, callback, defaultValue, icon)
-        return self:CreateDropdown(section, text, options, callback, defaultValue, icon)
+    function sectionObj:NewDropdown(text, options, callback, defaultValue)
+        return self:CreateDropdown(section, text, options, callback, defaultValue)
     end
     
-    function sectionObj:NewTextBox(text, callback, placeholder, icon)
-        return self:CreateTextBox(section, text, callback, placeholder, icon)
+    function sectionObj:NewTextBox(text, callback, placeholder)
+        return self:CreateTextBox(section, text, callback, placeholder)
     end
     
-    function sectionObj:NewKeybind(text, defaultKey, callback, icon)
-        return self:CreateKeybind(section, text, defaultKey, callback, icon)
+    function sectionObj:NewKeybind(text, defaultKey, callback)
+        return self:CreateKeybind(section, text, defaultKey, callback)
     end
     
-    function sectionObj:NewColorPicker(text, defaultColor, callback, icon)
-        return self:CreateColorPicker(section, text, defaultColor, callback, icon)
+    function sectionObj:NewColorPicker(text, defaultColor, callback)
+        return self:CreateColorPicker(section, text, defaultColor, callback)
     end
     
-    function sectionObj:NewLabel(text, textSize, color, icon)
-        return self:CreateLabel(section, text, textSize, color, icon)
+    function sectionObj:NewLabel(text, textSize, color)
+        return self:CreateLabel(section, text, textSize, color)
     end
     
     setmetatable(sectionObj, {
         __index = function(t, k)
             local methods = {
-                Button = function(_, text, callback, icon)
-                    return self:CreateButton(section, text, callback, nil, icon)
+                Button = function(_, text, callback)
+                    return self:CreateButton(section, text, callback)
                 end,
-                Toggle = function(_, text, callback, defaultValue, icon)
-                    return self:CreateToggle(section, text, callback, defaultValue, icon)
+                Toggle = function(_, text, callback, defaultValue)
+                    return self:CreateToggle(section, text, callback, defaultValue)
                 end,
-                Slider = function(_, text, min, max, callback, defaultValue, precision, icon)
-                    return self:CreateSlider(section, text, min, max, callback, defaultValue, precision, icon)
+                Slider = function(_, text, min, max, callback, defaultValue, precision)
+                    return self:CreateSlider(section, text, min, max, callback, defaultValue, precision)
                 end,
-                Dropdown = function(_, text, options, callback, defaultValue, icon)
-                    return self:CreateDropdown(section, text, options, callback, defaultValue, icon)
+                Dropdown = function(_, text, options, callback, defaultValue)
+                    return self:CreateDropdown(section, text, options, callback, defaultValue)
                 end,
-                TextBox = function(_, text, callback, placeholder, icon)
-                    return self:CreateTextBox(section, text, callback, placeholder, icon)
+                TextBox = function(_, text, callback, placeholder)
+                    return self:CreateTextBox(section, text, callback, placeholder)
                 end,
-                Keybind = function(_, text, defaultKey, callback, icon)
-                    return self:CreateKeybind(section, text, defaultKey, callback, icon)
+                Keybind = function(_, text, defaultKey, callback)
+                    return self:CreateKeybind(section, text, defaultKey, callback)
                 end,
-                ColorPicker = function(_, text, defaultColor, callback, icon)
-                    return self:CreateColorPicker(section, text, defaultColor, callback, icon)
+                ColorPicker = function(_, text, defaultColor, callback)
+                    return self:CreateColorPicker(section, text, defaultColor, callback)
                 end,
-                Label = function(_, text, textSize, color, icon)
-                    return self:CreateLabel(section, text, textSize, color, icon)
+                Label = function(_, text, textSize, color)
+                    return self:CreateLabel(section, text, textSize, color)
                 end
             }
             
@@ -529,50 +480,20 @@ function LuaUIX:CreateSection(parent, title)
     return sectionObj
 end
 
--- Create a button with icon support
-function LuaUIX:CreateButton(parent, text, callback, color, icon)
+-- Create a button
+function LuaUIX:CreateButton(parent, text, callback, color)
     color = color or colors.button
-    
-    -- Create container for button with icon
-    local container = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = parent
-    })
-    
     local btn = Create("TextButton", {
-        Size = UDim2.new(1, 0, 1, 0),
+        Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = color,
         Text = text or "Button",
         Font = Enum.Font.GothamBold,
         TextSize = 14,
         TextColor3 = colors.text,
-        Parent = container
+        Parent = parent
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = btn})
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = btn
-                btn.Text = "   " .. btn.Text
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = btn
-            btn.Text = "   " .. btn.Text
-        end
-    end
     
     -- Add consistent padding to buttons
     Create("UIPadding", {
@@ -613,49 +534,20 @@ function LuaUIX:CreateButton(parent, text, callback, color, icon)
     return self.elements[elementId]
 end
 
--- Create a toggle with icon support
-function LuaUIX:CreateToggle(parent, text, callback, defaultValue, icon)
-    -- Create container for toggle with icon
-    local container = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = parent
-    })
-    
+-- Create a toggle
+function LuaUIX:CreateToggle(parent, text, callback, defaultValue)
     local btn = Create("TextButton", {
-        Size = UDim2.new(1, 0, 1, 0),
+        Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = defaultValue and colors.accent or colors.toggleOff,
         Text = text or "Toggle",
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
         AutoButtonColor = false,
-        Parent = container
+        Parent = parent
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = btn})
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = btn
-                btn.Text = "   " .. btn.Text
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = btn
-            btn.Text = "   " .. btn.Text
-        end
-    end
     
     -- Add consistent padding to toggle buttons
     Create("UIPadding", {
@@ -691,53 +583,23 @@ function LuaUIX:CreateToggle(parent, text, callback, defaultValue, icon)
     return self.elements[elementId]
 end
 
--- Create a slider with icon support
-function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision, icon)
+-- Create a slider
+function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, precision)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 50),
         BackgroundTransparency = 1,
         Parent = parent
     })
     
-    -- Create container for label with icon
-    local labelContainer = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 20),
-        BackgroundTransparency = 1,
-        Parent = frame
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 0, 0.5, -8)
-                iconObj.Parent = labelContainer
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 0, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = labelContainer
-        end
-    end
-    
-    local iconOffset = icon and 20 or 0
-    
     local label = Create("TextLabel", {
-        Size = UDim2.new(1, -iconOffset, 1, 0),
-        Position = UDim2.new(0, iconOffset, 0, 0),
+        Size = UDim2.new(1, 0, 0, 20),
         BackgroundTransparency = 1,
         Text = text .. ": " .. (defaultValue or min),
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = labelContainer
+        Parent = frame
     })
     
     -- Add consistent padding to slider labels
@@ -815,8 +677,8 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- Create a dropdown with icon support
-function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, icon)
+-- Create a dropdown
+function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -825,44 +687,14 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, ic
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    -- Create container for dropdown with icon
-    local btnContainer = Create("Frame", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Parent = frame
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = btnContainer
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = btnContainer
-        end
-    end
-    
-    local iconOffset = icon and 30 or 0
-    
     local btn = Create("TextButton", {
-        Size = UDim2.new(1, -iconOffset, 1, 0),
-        Position = UDim2.new(0, iconOffset, 0, 0),
+        Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
         Text = text .. (defaultValue and (": " .. defaultValue) or " ▼"),
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
-        Parent = btnContainer
+        Parent = frame
     })
     
     -- Add consistent padding to dropdown buttons
@@ -1006,8 +838,8 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue, ic
     return self.elements[elementId]
 end
 
--- Create a textbox with icon support
-function LuaUIX:CreateTextBox(parent, text, callback, placeholder, icon)
+-- Create a textbox
+function LuaUIX:CreateTextBox(parent, text, callback, placeholder)
     local frame = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = colors.toggleOff,
@@ -1016,45 +848,16 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder, icon)
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
     
-    -- Create container for textbox with icon
-    local textboxContainer = Create("Frame", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Parent = frame
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = textboxContainer
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = textboxContainer
-        end
-    end
-    
-    local iconOffset = icon and 30 or 0
-    
     local textBox = Create("TextBox", {
-        Size = UDim2.new(1, -iconOffset - 10, 1, -10),
-        Position = UDim2.new(0, iconOffset, 0, 5),
+        Size = UDim2.new(1, -20, 1, -10),
+        Position = UDim2.new(0, 10, 0, 5),
         BackgroundTransparency = 1,
         Text = text or "",
         PlaceholderText = placeholder or "",
         Font = Enum.Font.Gotham,
         TextSize = 14,
         TextColor3 = colors.text,
-        Parent = textboxContainer
+        Parent = frame
     })
     
     -- Add consistent padding to textboxes
@@ -1094,267 +897,17 @@ function LuaUIX:CreateTextBox(parent, text, callback, placeholder, icon)
     return self.elements[elementId]
 end
 
--- Create a keybind with icon support
-function LuaUIX:CreateKeybind(parent, text, defaultKey, callback, icon)
-    local frame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = colors.toggleOff,
-        Parent = parent
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
-    
-    -- Create container for keybind with icon
-    local keybindContainer = Create("Frame", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Parent = frame
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = keybindContainer
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = keybindContainer
-        end
-    end
-    
-    local iconOffset = icon and 30 or 0
-    
+-- Create a label
+function LuaUIX:CreateLabel(parent, text, textSize, color)
     local label = Create("TextLabel", {
-        Size = UDim2.new(0.6, -iconOffset, 1, 0),
-        Position = UDim2.new(0, iconOffset, 0, 0),
-        BackgroundTransparency = 1,
-        Text = text,
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = keybindContainer
-    })
-    
-    -- Add consistent padding to keybind labels
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        Parent = label
-    })
-    
-    local keyLabel = Create("TextButton", {
-        Size = UDim2.new(0.4, -15, 1, -10),
-        Position = UDim2.new(0.6, 5, 0, 5),
-        BackgroundColor3 = colors.accent,
-        Text = defaultKey and defaultKey.Name or "NONE",
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        AutoButtonColor = false,
-        Parent = keybindContainer
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = keyLabel})
-    
-    -- Add consistent padding to keybind buttons
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 6),
-        PaddingRight = UDim.new(0, 6),
-        Parent = keyLabel
-    })
-    
-    local listening = false
-    local currentKey = defaultKey
-    
-    keyLabel.MouseButton1Click:Connect(function()
-        listening = true
-        keyLabel.Text = "..."
-        keyLabel.BackgroundColor3 = colors.warning
-    end)
-    
-    local connection = UserInputService.InputBegan:Connect(function(input)
-        if listening then
-            listening = false
-            currentKey = input.KeyCode
-            keyLabel.Text = currentKey.Name
-            keyLabel.BackgroundColor3 = colors.accent
-        end
-    end)
-    
-    table.insert(self.connections, connection)
-    
-    if defaultKey and callback then
-        local keyConnection = UserInputService.InputBegan:Connect(function(input)
-            if input.KeyCode == currentKey then
-                callback()
-            end
-        end)
-        
-        table.insert(self.connections, keyConnection)
-    end
-    
-    local elementId = "keybind_" .. HttpService:GenerateGUID(false)
-    self.elements[elementId] = {
-        SetKey = function(key)
-            currentKey = key
-            keyLabel.Text = key.Name
-        end,
-        GetKey = function()
-            return currentKey
-        end,
-        Destroy = function()
-            connection:Disconnect()
-        end
-    }
-    
-    return self.elements[elementId]
-end
-
--- Create a color picker with icon support
-function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback, icon)
-    local frame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = colors.toggleOff,
-        Parent = parent
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
-    
-    -- Create container for color picker with icon
-    local colorpickerContainer = Create("Frame", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Parent = frame
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 10, 0.5, -8)
-                iconObj.Parent = colorpickerContainer
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 10, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = colorpickerContainer
-        end
-    end
-    
-    local iconOffset = icon and 30 or 0
-    
-    local label = Create("TextLabel", {
-        Size = UDim2.new(0.6, -iconOffset, 1, 0),
-        Position = UDim2.new(0, iconOffset, 0, 0),
-        BackgroundTransparency = 1,
-        Text = text,
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = colorpickerContainer
-    })
-    
-    -- Add consistent padding to color picker labels
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        Parent = label
-    })
-    
-    local colorBox = Create("TextButton", {
-        Size = UDim2.new(0.4, -15, 1, -10),
-        Position = UDim2.new(0.6, 5, 0, 5),
-        BackgroundColor3 = defaultColor or colors.accent,
-        Text = "",
-        AutoButtonColor = false,
-        Parent = colorpickerContainer
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBox})
-    
-    local currentColor = defaultColor or colors.accent
-    
-    colorBox.MouseButton1Click:Connect(function()
-        -- Create color picker dialog
-        self:CreateColorPickerDialog(currentColor, function(newColor)
-            currentColor = newColor
-            colorBox.BackgroundColor3 = currentColor
-            if callback then
-                callback(currentColor)
-            end
-        end)
-    end)
-    
-    local elementId = "colorpicker_" .. HttpService:GenerateGUID(false)
-    self.elements[elementId] = {
-        SetColor = function(color)
-            currentColor = color
-            colorBox.BackgroundColor3 = color
-        end,
-        GetColor = function()
-            return currentColor
-        end
-    }
-    
-    return self.elements[elementId]
-end
-
--- Create a label with icon support
-function LuaUIX:CreateLabel(parent, text, textSize, color, icon)
-    -- Create container for label with icon
-    local container = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 20),
-        BackgroundTransparency = 1,
-        Parent = parent
-    })
-    
-    -- Add icon if provided
-    if icon then
-        if type(icon) == "string" then
-            -- Lucide icon by name
-            local iconObj = self:GetIcon(icon, "16px")
-            if iconObj then
-                iconObj.Position = UDim2.new(0, 0, 0.5, -8)
-                iconObj.Parent = container
-            end
-        elseif type(icon) == "number" then
-            -- Direct asset ID
-            local img = Instance.new("ImageLabel")
-            img.Size = UDim2.fromOffset(16, 16)
-            img.Position = UDim2.new(0, 0, 0.5, -8)
-            img.BackgroundTransparency = 1
-            img.Image = "rbxassetid://" .. icon
-            img.Parent = container
-        end
-    end
-    
-    local iconOffset = icon and 20 or 0
-    
-    local label = Create("TextLabel", {
-        Size = UDim2.new(1, -iconOffset, 1, 0),
-        Position = UDim2.new(0, iconOffset, 0, 0),
         BackgroundTransparency = 1,
         Text = text,
         Font = Enum.Font.Gotham,
         TextSize = textSize or 14,
         TextColor3 = color or colors.textSecondary,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
+        Parent = parent
     })
     
     -- Add consistent padding to labels
@@ -1374,85 +927,6 @@ function LuaUIX:CreateLabel(parent, text, textSize, color, icon)
     return self.elements[elementId]
 end
 
--- Create color picker dialog
-function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
-    local dialog = Create("Frame", {
-        Name = "ColorPickerDialog",
-        Size = UDim2.new(0, 300, 0, 200),
-        Position = UDim2.new(0.5, -150, 0.5, -100),
-        BackgroundColor3 = colors.section,
-        Parent = self.gui
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = dialog})
-    
-    -- Add padding to dialog
-    Create("UIPadding", {
-        PaddingTop = UDim.new(0, 10),
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        PaddingBottom = UDim.new(0, 10),
-        Parent = dialog
-    })
-    
-    -- Simple color selection buttons
-    local colors = {
-        Color3.fromRGB(255, 0, 0),    -- Red
-        Color3.fromRGB(0, 255, 0),    -- Green
-        Color3.fromRGB(0, 0, 255),    -- Blue
-        Color3.fromRGB(255, 255, 0),  -- Yellow
-        Color3.fromRGB(255, 0, 255),  -- Magenta
-        Color3.fromRGB(0, 255, 255),  -- Cyan
-        Color3.fromRGB(255, 165, 0),  -- Orange
-        Color3.fromRGB(128, 0, 128)   -- Purple
-    }
-    
-    for i, color in ipairs(colors) do
-        local colorBtn = Create("TextButton", {
-            Size = UDim2.new(0, 40, 0, 40),
-            Position = UDim2.new(0, 20 + ((i-1) % 4) * 70, 0, 20 + math.floor((i-1)/4) * 70),
-            BackgroundColor3 = color,
-            Text = "",
-            Parent = dialog
-        })
-        
-        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBtn})
-        
-        colorBtn.MouseButton1Click:Connect(function()
-            dialog:Destroy()
-            if callback then
-                callback(color)
-            end
-        end)
-    end
-    
-    local closeButton = Create("TextButton", {
-        Size = UDim2.new(0, 80, 0, 30),
-        Position = UDim2.new(0.5, -40, 1, -40),
-        BackgroundColor3 = colors.accent,
-        Text = "Cancel",
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        TextColor3 = colors.text,
-        Parent = dialog
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = closeButton})
-    
-    -- Add consistent padding to dialog buttons
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = closeButton
-    })
-    
-    closeButton.MouseButton1Click:Connect(function()
-        dialog:Destroy()
-    end)
-    
-    return dialog
-end
-
 -- Focus management
 function LuaUIX:SetFocusedElement(element)
     self.focusedElement = element
@@ -1460,20 +934,6 @@ end
 
 function LuaUIX:GetFocusedElement()
     return self.focusedElement
-end
-
--- Make UI responsive to screen size
-function LuaUIX:MakeResponsive()
-    local function updateSize()
-        local viewportSize = workspace.CurrentCamera.ViewportSize
-        local scale = math.min(viewportSize.X / 1920, viewportSize.Y / 1080) * 0.9
-        
-        self.window.Size = UDim2.new(0, 650 * scale, 0, 500 * scale)
-        self.window.Position = UDim2.new(0.5, -325 * scale, 0.5, -250 * scale)
-    end
-    
-    updateSize()
-    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateSize)
 end
 
 -- Toggle UI visibility
@@ -1491,11 +951,6 @@ function LuaUIX:Destroy()
     end
     
     self.gui:Destroy()
-end
-
--- Kavo-style alias methods for compatibility
-function LuaUIX:CreateLib(menuName)
-    return self.new(menuName)
 end
 
 return LuaUIX
