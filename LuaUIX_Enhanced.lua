@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- FIXED DROPDOWN WITH PROPER CONNECTION MANAGEMENT
+-- RELIABLE DROPDOWN IMPLEMENTATION - SIMPLIFIED
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     
@@ -700,176 +700,61 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = btn
     })
     
-    -- Create element state
-    local elementState = {
+    -- Store state in self.elements
+    self.elements[elementId] = {
         currentOption = defaultValue,
-        optionButtons = {},
-        connections = {}
+        btn = btn,
+        text = text,
+        options = options,
+        callback = callback
     }
     
-    -- Create dropdown list
-    local listFrame = Create("Frame", {
-        Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.new(0, 0, 1, 5),
-        BackgroundColor3 = Color3.fromRGB(30, 32, 44),
-        Visible = false,
-        ZIndex = 10,
-        Parent = frame
-    })
+    local element = self.elements[elementId]
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
+    -- DEBUG: Print when dropdown is created
+    print("Dropdown created with default:", defaultValue)
     
-    local listLayout = Create("UIListLayout", {
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = listFrame
-    })
-    
-    -- Create options as interactive buttons
-    for i, opt in ipairs(options) do
-        local optBtn = Create("TextButton", {
-            Size = UDim2.new(1, 0, 0, 28),
-            BackgroundTransparency = 1,
-            Text = opt,
-            Font = Enum.Font.Gotham,
-            TextSize = 14,
-            TextColor3 = Color3.fromRGB(220, 220, 220),
-            LayoutOrder = i,
-            ZIndex = 11,
-            AutoButtonColor = false,
-            Parent = listFrame
-        })
+    -- Main dropdown toggle - SIMPLIFIED: Just cycle through options
+    btn.MouseButton1Click:Connect(function()
+        local currentIndex = table.find(options, element.currentOption) or 1
+        local nextIndex = (currentIndex % #options) + 1
+        local newOption = options[nextIndex]
         
-        Create("UIPadding", {
-            PaddingLeft = UDim.new(0, 10),
-            PaddingRight = UDim.new(0, 10),
-            Parent = optBtn
-        })
+        print("Dropdown clicked! Changing from", element.currentOption, "to", newOption)
         
-        -- Store button reference
-        elementState.optionButtons[opt] = optBtn
+        element.currentOption = newOption
+        element.btn.Text = element.text .. ": " .. newOption
         
-        -- Highlight if this is the default option
-        if opt == defaultValue then
-            optBtn.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-            optBtn.TextColor3 = colors.accent
-        end
-        
-        -- Hover effects
-        local enterConn = optBtn.MouseEnter:Connect(function()
-            if opt ~= elementState.currentOption then
-                optBtn.BackgroundColor3 = Color3.fromRGB(50, 52, 64)
-            end
-        end)
-        
-        local leaveConn = optBtn.MouseLeave:Connect(function()
-            if opt ~= elementState.currentOption then
-                optBtn.BackgroundTransparency = 1
-                optBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
-            end
-        end)
-        
-        -- CLICK EVENT
-        local clickConn = optBtn.MouseButton1Click:Connect(function()
-            print("Option clicked:", opt)
-            
-            -- Update current option
-            elementState.currentOption = opt
-            
-            -- Update main button text
-            btn.Text = text .. ": " .. opt
-            
-            -- Update visual highlighting
-            for optionName, button in pairs(elementState.optionButtons) do
-                if optionName == opt then
-                    button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-                    button.TextColor3 = colors.accent
-                else
-                    button.BackgroundTransparency = 1
-                    button.TextColor3 = Color3.fromRGB(220, 220, 220)
-                end
-            end
-            
-            -- Close dropdown
-            listFrame.Visible = false
-            
-            -- Call callback
-            if callback then 
-                callback(opt) 
-            end
-        end)
-        
-        -- Store connections
-        table.insert(elementState.connections, enterConn)
-        table.insert(elementState.connections, leaveConn)
-        table.insert(elementState.connections, clickConn)
-    end
-    
-    -- Update list frame size
-    local sizeConn = listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        listFrame.Size = UDim2.new(1, 0, 0, math.min(listLayout.AbsoluteContentSize.Y, 140))
-    end)
-    table.insert(elementState.connections, sizeConn)
-    
-    -- Main dropdown toggle
-    local toggleConn = btn.MouseButton1Click:Connect(function()
-        listFrame.Visible = not listFrame.Visible
-    end)
-    table.insert(elementState.connections, toggleConn)
-    
-    -- Close when clicking outside
-    local closeConnection = UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
-            if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
-                listFrame.Visible = false
-            end
+        if element.callback then
+            element.callback(newOption)
         end
     end)
-    table.insert(self.connections, closeConnection)
-    
-    -- Store element state
-    self.elements[elementId] = elementState
     
     -- Return methods
     return {
         SetOption = function(option)
             if table.find(options, option) then
                 print("SetOption called with:", option)
-                elementState.currentOption = option
-                btn.Text = text .. ": " .. option
+                element.currentOption = option
+                element.btn.Text = element.text .. ": " .. option
                 
-                -- Update visual highlighting
-                for opt, button in pairs(elementState.optionButtons) do
-                    if opt == option then
-                        button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-                        button.TextColor3 = colors.accent
-                    else
-                        button.BackgroundTransparency = 1
-                        button.TextColor3 = Color3.fromRGB(220, 220, 220)
-                    end
-                end
-                
-                if callback then
-                    callback(option)
+                if element.callback then
+                    element.callback(option)
                 end
             end
         end,
+        
         GetOption = function()
-            print("GetOption returning:", elementState.currentOption)
-            return elementState.currentOption
+            print("GetOption returning:", element.currentOption)
+            return element.currentOption
         end,
+        
         Destroy = function()
-            -- Disconnect all connections safely
-            for _, conn in ipairs(elementState.connections) do
-                if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
-                    conn:Disconnect()
-                end
-            end
             frame:Destroy()
             self.elements[elementId] = nil
         end
     }
 end
-
 -- Create a label
 function LuaUIX:CreateLabel(parent, text, textSize, color)
     local elementId = "label_" .. HttpService:GenerateGUID(false)
