@@ -671,57 +671,213 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- FIXED DROPDOWN WITH PROPER PROGRAMMATIC CONTROL
+-- DROPDOWN IMPLEMENTATION INSPIRED BY YOUR EXAMPLE
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     
+    -- Create main dropdown frame
     local frame = Create("Frame", {
         Name = "DropdownFrame",
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = colors.toggleOff,
+        Size = UDim2.new(1, 0, 0, 45),
+        BackgroundColor3 = Color3.fromRGB(35, 35, 35),
         Parent = parent
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = frame})
-    
-    local btn = Create("TextButton", {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = text .. (defaultValue and (": " .. defaultValue) or " ▼"),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextColor3 = colors.text,
+    Create("UIStroke", {
+        Color = Color3.fromRGB(60, 60, 60),
+        Transparency = 0,
         Parent = frame
     })
     
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = btn
+    -- Title
+    local title = Create("TextLabel", {
+        Name = "Title",
+        Size = UDim2.new(1, 0, 0, 20),
+        Position = UDim2.new(0, 10, 0, 5),
+        BackgroundTransparency = 1,
+        Text = text,
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = frame
     })
     
-    -- Store state in self.elements
-    self.elements[elementId] = {
+    -- Selected value display
+    local selected = Create("TextLabel", {
+        Name = "Selected",
+        Size = UDim2.new(1, -20, 0, 20),
+        Position = UDim2.new(0, 10, 0, 25),
+        BackgroundTransparency = 1,
+        Text = defaultValue or "Select...",
+        Font = Enum.Font.Gotham,
+        TextSize = 14,
+        TextColor3 = colors.textSecondary,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = frame
+    })
+    
+    -- Toggle arrow
+    local toggle = Create("TextLabel", {
+        Name = "Toggle",
+        Size = UDim2.new(0, 20, 0, 20),
+        Position = UDim2.new(1, -25, 0, 25),
+        BackgroundTransparency = 1,
+        Text = "▼",
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        TextColor3 = colors.textSecondary,
+        Parent = frame
+    })
+    
+    -- Interactive button
+    local interact = Create("TextButton", {
+        Name = "Interact",
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        Parent = frame
+    })
+    
+    -- Dropdown list frame
+    local listFrame = Create("ScrollingFrame", {
+        Name = "List",
+        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.new(0, 0, 1, 5),
+        BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+        Visible = false,
+        ScrollBarThickness = 6,
+        ScrollBarImageColor3 = colors.accent,
+        ZIndex = 10,
+        Parent = frame
+    })
+    
+    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
+    Create("UIStroke", {
+        Color = Color3.fromRGB(60, 60, 60),
+        Transparency = 0,
+        Parent = listFrame
+    })
+    
+    local listLayout = Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = listFrame
+    })
+    
+    -- Store state
+    local state = {
         currentOption = defaultValue,
-        btn = btn,  -- Store the actual TextButton, not the wrapper object
+        frame = frame,
+        selected = selected,
+        toggle = toggle,
+        listFrame = listFrame,
         text = text,
         options = options,
-        callback = callback
+        callback = callback,
+        isOpen = false
     }
     
-    local element = self.elements[elementId]
+    self.elements[elementId] = state
     
-    -- Main dropdown toggle - Cycle through options on click
-    btn.MouseButton1Click:Connect(function()
-        local currentIndex = table.find(options, element.currentOption) or 1
-        local nextIndex = (currentIndex % #options) + 1
-        local newOption = options[nextIndex]
+    -- Create option buttons
+    for _, option in ipairs(options) do
+        local optionFrame = Create("Frame", {
+            Name = option,
+            Size = UDim2.new(1, 0, 0, 30),
+            BackgroundColor3 = option == defaultValue and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(30, 30, 30),
+            BackgroundTransparency = 0,
+            Parent = listFrame
+        })
         
-        element.currentOption = newOption
-        element.btn.Text = element.text .. ": " .. newOption
+        Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = optionFrame})
+        Create("UIStroke", {
+            Color = Color3.fromRGB(60, 60, 60),
+            Transparency = 0,
+            Parent = optionFrame
+        })
         
-        if element.callback then
-            element.callback(newOption)
+        local optionTitle = Create("TextLabel", {
+            Name = "Title",
+            Size = UDim2.new(1, -20, 1, 0),
+            Position = UDim2.new(0, 10, 0, 0),
+            BackgroundTransparency = 1,
+            Text = option,
+            Font = Enum.Font.Gotham,
+            TextSize = 14,
+            TextColor3 = colors.text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = optionFrame
+        })
+        
+        local optionInteract = Create("TextButton", {
+            Name = "Interact",
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            Text = "",
+            ZIndex = 11,
+            Parent = optionFrame
+        })
+        
+        optionInteract.MouseButton1Click:Connect(function()
+            if state.currentOption ~= option then
+                state.currentOption = option
+                state.selected.Text = option
+                
+                -- Update visual highlighting
+                for _, optFrame in ipairs(listFrame:GetChildren()) do
+                    if optFrame:IsA("Frame") and optFrame.Name ~= "Placeholder" then
+                        if optFrame.Name == option then
+                            optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                        else
+                            optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                        end
+                    end
+                end
+                
+                if state.callback then
+                    state.callback(option)
+                end
+            end
+            
+            -- Close dropdown
+            state.isOpen = false
+            state.listFrame.Visible = false
+            state.listFrame.Size = UDim2.new(1, 0, 0, 0)
+            state.toggle.Text = "▼"
+            state.frame.Size = UDim2.new(1, 0, 0, 45)
+        end)
+    end
+    
+    -- Toggle dropdown
+    interact.MouseButton1Click:Connect(function()
+        state.isOpen = not state.isOpen
+        
+        if state.isOpen then
+            -- Open dropdown
+            state.listFrame.Visible = true
+            state.listFrame.Size = UDim2.new(1, 0, 0, math.min(#options * 30, 150))
+            state.toggle.Text = "▲"
+            state.frame.Size = UDim2.new(1, 0, 0, 45 + math.min(#options * 30, 150))
+        else
+            -- Close dropdown
+            state.listFrame.Visible = false
+            state.listFrame.Size = UDim2.new(1, 0, 0, 0)
+            state.toggle.Text = "▼"
+            state.frame.Size = UDim2.new(1, 0, 0, 45)
+        end
+    end)
+    
+    -- Hover effects
+    interact.MouseEnter:Connect(function()
+        if not state.isOpen then
+            state.frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        end
+    end)
+    
+    interact.MouseLeave:Connect(function()
+        if not state.isOpen then
+            state.frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
         end
     end)
     
@@ -729,18 +885,28 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     return {
         SetOption = function(option)
             if table.find(options, option) then
-                print("SetOption called with:", option)
-                element.currentOption = option
-                element.btn.Text = element.text .. ": " .. option  -- Directly set Text property
+                state.currentOption = option
+                state.selected.Text = option
                 
-                if element.callback then
-                    element.callback(option)
+                -- Update visual highlighting
+                for _, optFrame in ipairs(listFrame:GetChildren()) do
+                    if optFrame:IsA("Frame") and optFrame.Name ~= "Placeholder" then
+                        if optFrame.Name == option then
+                            optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                        else
+                            optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                        end
+                    end
+                end
+                
+                if state.callback then
+                    state.callback(option)
                 end
             end
         end,
         
         GetOption = function()
-            return element.currentOption
+            return state.currentOption
         end,
         
         Destroy = function()
