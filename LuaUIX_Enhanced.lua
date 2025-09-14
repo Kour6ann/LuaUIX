@@ -1120,7 +1120,7 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     return self.elements[elementId]
 end
 
--- Enhanced Color Picker Dialog
+-- Enhanced Color Picker Dialog - FIXED VERSION
 function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     local dialog = Create("Frame", {
         Name = "ColorPickerDialog",
