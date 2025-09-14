@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- FIXED DROPDOWN WITH PROPER VISUALS
+-- PROPERLY VISIBLE DROPDOWN IMPLEMENTATION
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     
@@ -740,17 +740,17 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = frame
     })
     
-    -- Dropdown list frame (parent to GUI for proper z-index)
+    -- Dropdown list frame - PARENT TO GUI FOR PROPER VISIBILITY
     local listFrame = Create("ScrollingFrame", {
         Name = "List",
         Size = UDim2.new(1, -10, 0, 0),
-        Position = UDim2.new(0, 5, 1, 5),
+        Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y + 5),
         BackgroundColor3 = Color3.fromRGB(30, 30, 30),
         Visible = false,
         ScrollBarThickness = 6,
         ScrollBarImageColor3 = colors.accent,
-        ZIndex = 10,
-        Parent = frame  -- Parent to frame for proper positioning
+        ZIndex = 20,  -- Higher z-index to appear above other elements
+        Parent = self.gui  -- Parent to GUI, not frame
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
@@ -790,7 +790,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     
     self.elements[elementId] = state
     
-    -- Create option buttons using UIListLayout for automatic positioning
+    -- Create option buttons
     for _, option in ipairs(options) do
         local optionFrame = Create("Frame", {
             Name = option,
@@ -820,7 +820,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
             Text = "",
-            ZIndex = 11,
+            ZIndex = 21,  -- Higher than listFrame
             Parent = optionFrame
         })
         
@@ -832,7 +832,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
                 state.currentOption = option
                 state.selected.Text = option
                 
-                -- Update visual highlighting for ALL options
+                -- Update visual highlighting
                 for opt, optFrame in pairs(state.optionFrames) do
                     if opt == option then
                         optFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -851,7 +851,6 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             state.listFrame.Visible = false
             state.listFrame.Size = UDim2.new(1, -10, 0, 0)
             state.toggle.Text = "▼"
-            state.frame.Size = UDim2.new(1, 0, 0, 45)
         end)
     end
     
@@ -865,33 +864,36 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         state.isOpen = not state.isOpen
         
         if state.isOpen then
+            -- Update position before showing (in case window moved)
+            listFrame.Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y + 5)
+            
             -- Open dropdown
             state.listFrame.Visible = true
-            local maxHeight = math.min(#options * 35, 150)  -- 30 height + 5 padding
-            state.listFrame.Size = UDim2.new(1, -10, 0, maxHeight)
+            local maxHeight = math.min(#options * 35, 150)
+            listFrame.Size = UDim2.new(frame.AbsoluteSize.X - 10, 0, 0, maxHeight)
             state.toggle.Text = "▲"
-            state.frame.Size = UDim2.new(1, 0, 0, 45 + maxHeight + 10)  -- +10 for padding
         else
             -- Close dropdown
             state.listFrame.Visible = false
             state.listFrame.Size = UDim2.new(1, -10, 0, 0)
             state.toggle.Text = "▼"
-            state.frame.Size = UDim2.new(1, 0, 0, 45)
         end
     end)
     
-    -- Hover effects
-    interact.MouseEnter:Connect(function()
-        if not state.isOpen then
-            state.frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    -- Close dropdown when clicking outside
+    local closeConnection
+    closeConnection = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and state.isOpen then
+            if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
+                state.isOpen = false
+                state.listFrame.Visible = false
+                state.listFrame.Size = UDim2.new(1, -10, 0, 0)
+                state.toggle.Text = "▼"
+            end
         end
     end)
     
-    interact.MouseLeave:Connect(function()
-        if not state.isOpen then
-            state.frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-        end
-    end)
+    table.insert(self.connections, closeConnection)
     
     -- Return methods
     return {
@@ -900,7 +902,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
                 state.currentOption = option
                 state.selected.Text = option
                 
-                -- Update visual highlighting for ALL options
+                -- Update visual highlighting
                 for opt, optFrame in pairs(state.optionFrames) do
                     if opt == option then
                         optFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -921,6 +923,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         
         Destroy = function()
             frame:Destroy()
+            listFrame:Destroy()
             self.elements[elementId] = nil
         end
     }
