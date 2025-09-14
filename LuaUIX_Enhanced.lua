@@ -1,4 +1,4 @@
--- LuaUIX Library v1.1 - Fixed & Enhanced Implementation
+-- LuaUIX Library v1.1 - Fixed Implementation
 -- A reliable UI library for Roblox exploits
 
 local LuaUIX = {}
@@ -11,10 +11,16 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 
--- Safe instance creation function with error handling
+-- Safe instance creation function with proper Parent handling
 local function Create(className, properties)
     local success, instance = pcall(function()
         local inst = Instance.new(className)
+        
+        -- Handle Parent property separately (it must be set last)
+        local parentValue = properties.Parent
+        properties.Parent = nil -- Remove from properties to handle separately
+        
+        -- Set all other properties
         for property, value in pairs(properties) do
             if inst[property] ~= nil then
                 inst[property] = value
@@ -22,6 +28,12 @@ local function Create(className, properties)
                 warn("[LuaUIX] Property '" .. property .. "' does not exist for " .. className)
             end
         end
+        
+        -- Set Parent last
+        if parentValue then
+            inst.Parent = parentValue
+        end
+        
         return inst
     end)
     
@@ -957,7 +969,7 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
     local keyLabel = Create("TextButton", {
         Size = UDim2.new(0.4, -15, 1, -10),
         Position = UDim2.new(0.6, 5, 0, 5),
-        BackgroundColor3 = colors.accent,
+        BackgroundColor3 = colors.accept,
         Text = defaultKey and defaultKey.Name or "NONE",
         Font = Enum.Font.GothamBold,
         TextSize = 14,
