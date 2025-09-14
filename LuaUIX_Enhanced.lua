@@ -1120,19 +1120,22 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     return self.elements[elementId]
 end
 
--- SIMPLIFIED Color Picker Dialog (No tooltips)
+-- FIXED Color Picker Dialog - Manual Parenting
 function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
-    local dialog = Create("Frame", {
-        Name = "ColorPickerDialog",
-        Size = UDim2.new(0, 250, 0, 200),
-        Position = UDim2.new(0.5, -125, 0.5, -100),
-        BackgroundColor3 = colors.section,
-        ZIndex = 20,
-        Parent = self.gui
-    })
+    -- Create dialog frame
+    local dialog = Instance.new("Frame")
+    dialog.Name = "ColorPickerDialog"
+    dialog.Size = UDim2.new(0, 250, 0, 200)
+    dialog.Position = UDim2.new(0.5, -125, 0.5, -100)
+    dialog.BackgroundColor3 = colors.section
+    dialog.ZIndex = 20
+    dialog.Parent = self.gui
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = dialog})
+    local dialogCorner = Instance.new("UICorner")
+    dialogCorner.CornerRadius = UDim.new(0, 8)
+    dialogCorner.Parent = dialog
     
+    -- Color options
     local colorList = {
         Color3.fromRGB(255, 0, 0),    -- Red
         Color3.fromRGB(0, 255, 0),    -- Green
@@ -1146,16 +1149,19 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
         Color3.fromRGB(0, 0, 0),      -- Black
     }
     
+    -- Create color buttons manually
     for i, color in ipairs(colorList) do
-        local btn = Create("TextButton", {
-            Size = UDim2.new(0, 30, 0, 30),
-            Position = UDim2.new(0, 15 + ((i-1) % 5) * 45, 0, 30 + math.floor((i-1)/5) * 40),
-            BackgroundColor3 = color,
-            Text = "",
-            Parent = dialog
-        })
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 30, 0, 30)
+        btn.Position = UDim2.new(0, 15 + ((i-1) % 5) * 45, 0, 30 + math.floor((i-1)/5) * 40)
+        btn.BackgroundColor3 = color
+        btn.Text = ""
+        btn.ZIndex = 21
+        btn.Parent = dialog
         
-        Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = btn})
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = btn
         
         btn.MouseButton1Click:Connect(function()
             dialog:Destroy()
@@ -1163,20 +1169,26 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
         end)
     end
     
-    local closeBtn = Create("TextButton", {
-        Size = UDim2.new(0, 80, 0, 25),
-        Position = UDim2.new(0.5, -40, 1, -35),
-        BackgroundColor3 = colors.accent,
-        Text = "Close",
-        TextColor3 = colors.text,
-        Parent = dialog
-    })
+    -- Create close button manually
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 80, 0, 25)
+    closeBtn.Position = UDim2.new(0.5, -40, 1, -35)
+    closeBtn.BackgroundColor3 = colors.accent
+    closeBtn.Text = "Close"
+    closeBtn.TextColor3 = colors.text
+    closeBtn.ZIndex = 21
+    closeBtn.Parent = dialog
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = closeBtn})
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 4)
+    closeCorner.Parent = closeBtn
     
     closeBtn.MouseButton1Click:Connect(function()
         dialog:Destroy()
     end)
+    
+    -- Make dialog draggable
+    self:draggable(dialog)
     
     return dialog
 end
