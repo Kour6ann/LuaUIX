@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- COMPLETELY FIXED DROPDOWN IMPLEMENTATION
+-- FIXED DROPDOWN IMPLEMENTATION - PROPER STATE MANAGEMENT
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     local elementConnections = {}
@@ -701,7 +701,15 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = btn
     })
     
-    local currentOption = defaultValue
+    -- Use self.elements to store state instead of local variable
+    self.elements[elementId] = {
+        currentOption = defaultValue,
+        optionButtons = {},
+        frame = frame,
+        btn = btn
+    }
+    
+    local element = self.elements[elementId]
     
     -- Create dropdown list
     local listFrame = Create("Frame", {
@@ -719,9 +727,6 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         SortOrder = Enum.SortOrder.LayoutOrder,
         Parent = listFrame
     })
-    
-    -- Store option buttons for highlighting
-    local optionButtons = {}
     
     -- Create options as interactive buttons
     for i, opt in ipairs(options) do
@@ -744,41 +749,41 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Parent = optBtn
         })
         
+        -- Store button reference
+        element.optionButtons[opt] = optBtn
+        
         -- Highlight if this is the default option
         if opt == defaultValue then
             optBtn.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
             optBtn.TextColor3 = colors.accent
         end
         
-        -- Store button reference
-        optionButtons[opt] = optBtn
-        
         -- Hover effects
         optBtn.MouseEnter:Connect(function()
-            if opt ~= currentOption then
+            if opt ~= element.currentOption then
                 optBtn.BackgroundColor3 = Color3.fromRGB(50, 52, 64)
             end
         end)
         
         optBtn.MouseLeave:Connect(function()
-            if opt ~= currentOption then
+            if opt ~= element.currentOption then
                 optBtn.BackgroundTransparency = 1
                 optBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
             end
         end)
         
-        -- CLICK EVENT - FIXED
+        -- CLICK EVENT
         optBtn.MouseButton1Click:Connect(function()
-            print("Option clicked:", opt) -- DEBUG
+            print("Option clicked:", opt)
             
-            -- Update current option
-            currentOption = opt
+            -- Update current option in the element state
+            element.currentOption = opt
             
             -- Update main button text
-            btn.Text = text .. ": " .. opt
+            element.btn.Text = text .. ": " .. opt
             
             -- Update visual highlighting
-            for optionName, button in pairs(optionButtons) do
+            for optionName, button in pairs(element.optionButtons) do
                 if optionName == opt then
                     -- Highlight selected option
                     button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
@@ -822,14 +827,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     
     table.insert(self.connections, closeConnection)
     
-    self.elements[elementId] = {
+    -- Return methods that access the element state
+    return {
         SetOption = function(option)
             if table.find(options, option) then
-                currentOption = option
-                btn.Text = text .. ": " .. option
+                print("SetOption called with:", option)
+                element.currentOption = option
+                element.btn.Text = text .. ": " .. option
                 
                 -- Update visual highlighting
-                for opt, button in pairs(optionButtons) do
+                for opt, button in pairs(element.optionButtons) do
                     if opt == option then
                         button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
                         button.TextColor3 = colors.accent
@@ -838,18 +845,21 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
                         button.TextColor3 = Color3.fromRGB(220, 220, 220)
                     end
                 end
+                
+                if callback then
+                    callback(option)
+                end
             end
         end,
         GetOption = function()
-            return currentOption
+            print("GetOption returning:", element.currentOption)
+            return element.currentOption
         end,
         Destroy = function()
             frame:Destroy()
             self.elements[elementId] = nil
         end
     }
-    
-    return self.elements[elementId]
 end
 
 -- Create a label
