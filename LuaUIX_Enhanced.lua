@@ -1181,7 +1181,7 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     return dialog
 end
 
--- Add tooltip functionality
+-- Fixed Tooltip functionality
 function LuaUIX:AddTooltip(element, text)
     local tooltip = Create("Frame", {
         Name = "Tooltip",
@@ -1219,17 +1219,35 @@ function LuaUIX:AddTooltip(element, text)
     
     tooltip.Size = UDim2.new(0, 200, 0, label.TextBounds.Y + 12)
     
-    element.MouseEnter:Connect(function()
+    -- Store tooltip reference for cleanup
+    if not self.tooltips then
+        self.tooltips = {}
+    end
+    self.tooltips[element] = tooltip
+    
+    local mouseEnterConnection = element.MouseEnter:Connect(function()
         tooltip.Visible = true
     end)
     
-    element.MouseLeave:Connect(function()
+    local mouseLeaveConnection = element.MouseLeave:Connect(function()
         tooltip.Visible = false
     end)
     
-    element.MouseMoved:Connect(function(x, y)
+    local mouseMovedConnection = element.MouseMoved:Connect(function(x, y)
         tooltip.Position = UDim2.new(0, x + 20, 0, y + 20)
     end)
+    
+    -- Store connections for cleanup
+    if not self.tooltipConnections then
+        self.tooltipConnections = {}
+    end
+    self.tooltipConnections[element] = {
+        mouseEnterConnection,
+        mouseLeaveConnection,
+        mouseMovedConnection
+    }
+    
+    return tooltip
 end
 
 -- Notification system with proper padding
