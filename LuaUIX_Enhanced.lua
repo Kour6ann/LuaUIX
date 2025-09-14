@@ -1389,12 +1389,31 @@ function LuaUIX:ToggleVisibility()
     self.gui.Enabled = not self.gui.Enabled
 end
 
--- Destroy UI
+-- Destroy UI (add tooltip cleanup)
 function LuaUIX:Destroy()
     -- Disconnect all connections
     for _, connection in ipairs(self.connections) do
         if connection.Connected then
             connection:Disconnect()
+        end
+    end
+    
+    -- Destroy all tooltips and their connections
+    if self.tooltipConnections then
+        for element, connections in pairs(self.tooltipConnections) do
+            for _, conn in ipairs(connections) do
+                if conn.Connected then
+                    conn:Disconnect()
+                end
+            end
+        end
+    end
+    
+    if self.tooltips then
+        for _, tooltip in pairs(self.tooltips) do
+            if tooltip and tooltip.Parent then
+                tooltip:Destroy()
+            end
         end
     end
     
