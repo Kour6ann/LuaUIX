@@ -969,7 +969,7 @@ function LuaUIX:CreateKeybind(parent, text, defaultKey, callback)
     local keyLabel = Create("TextButton", {
         Size = UDim2.new(0.4, -15, 1, -10),
         Position = UDim2.new(0.6, 5, 0, 5),
-        BackgroundColor3 = colors.accept,
+        BackgroundColor3 = colors.accent,
         Text = defaultKey and defaultKey.Name or "NONE",
         Font = Enum.Font.GothamBold,
         TextSize = 14,
