@@ -1181,56 +1181,7 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     return dialog
 end
 
--- Add tooltip functionality
-function LuaUIX:AddTooltip(element, text)
-    local tooltip = Create("Frame", {
-        Name = "Tooltip",
-        Size = UDim2.new(0, 200, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(40, 40, 50),
-        BorderSizePixel = 0,
-        Visible = false,
-        ZIndex = 30,
-        Parent = self.gui
-    })
-    
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = tooltip})
-    
-    -- Add padding to tooltips
-    Create("UIPadding", {
-        PaddingTop = UDim.new(0, 6),
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        PaddingBottom = UDim.new(0, 6),
-        Parent = tooltip
-    })
-    
-    local label = Create("TextLabel", {
-        Size = UDim2.new(1, -20, 0, 0),
-        Position = UDim2.new(0, 10, 0, 6),
-        BackgroundTransparency = 1,
-        Text = text,
-        Font = Enum.Font.Gotham,
-        TextSize = 12,
-        TextColor3 = colors.text,
-        TextWrapped = true,
-        AutomaticSize = Enum.AutomaticSize.Y,
-        Parent = tooltip
-    })
-    
-    tooltip.Size = UDim2.new(0, 200, 0, label.TextBounds.Y + 12)
-    
-    element.MouseEnter:Connect(function()
-        tooltip.Visible = true
-    end)
-    
-    element.MouseLeave:Connect(function()
-        tooltip.Visible = false
-    end)
-    
-    element.MouseMoved:Connect(function(x, y)
-        tooltip.Position = UDim2.new(0, x + 20, 0, y + 20)
-    end)
-end
+
 
 -- Notification system with proper padding
 function LuaUIX:Notify(title, message, duration, notifType)
