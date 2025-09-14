@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- COMPLETELY FIXED Dropdown Implementation
+-- COMPLETELY FIXED DROPDOWN IMPLEMENTATION
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     local elementConnections = {}
@@ -701,14 +701,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = btn
     })
     
-    -- Create dropdown list but don't parent it yet
-    local listFrame = Create("ScrollingFrame", {
-        Size = UDim2.new(0, frame.AbsoluteSize.X, 0, 0),
+    local currentOption = defaultValue
+    
+    -- Create dropdown list
+    local listFrame = Create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.new(0, 0, 1, 5),
         BackgroundColor3 = Color3.fromRGB(30, 32, 44),
         Visible = false,
-        ScrollBarThickness = 6,
-        ScrollBarImageColor3 = colors.accent,
         ZIndex = 10,
+        Parent = frame
     })
     
     Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = listFrame})
@@ -718,10 +720,11 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         Parent = listFrame
     })
     
-    local currentOption = defaultValue
+    -- Store option buttons for highlighting
+    local optionButtons = {}
     
-    -- Create options
-    for _, opt in ipairs(options) do
+    -- Create options as interactive buttons
+    for i, opt in ipairs(options) do
         local optBtn = Create("TextButton", {
             Size = UDim2.new(1, 0, 0, 28),
             BackgroundTransparency = 1,
@@ -729,8 +732,9 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Font = Enum.Font.Gotham,
             TextSize = 14,
             TextColor3 = Color3.fromRGB(220, 220, 220),
-            LayoutOrder = _,
+            LayoutOrder = i,
             ZIndex = 11,
+            AutoButtonColor = false,
             Parent = listFrame
         })
         
@@ -740,76 +744,110 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Parent = optBtn
         })
         
-        table.insert(elementConnections, optBtn.MouseButton1Click:Connect(function()
+        -- Highlight if this is the default option
+        if opt == defaultValue then
+            optBtn.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+            optBtn.TextColor3 = colors.accent
+        end
+        
+        -- Store button reference
+        optionButtons[opt] = optBtn
+        
+        -- Hover effects
+        optBtn.MouseEnter:Connect(function()
+            if opt ~= currentOption then
+                optBtn.BackgroundColor3 = Color3.fromRGB(50, 52, 64)
+            end
+        end)
+        
+        optBtn.MouseLeave:Connect(function()
+            if opt ~= currentOption then
+                optBtn.BackgroundTransparency = 1
+                optBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+            end
+        end)
+        
+        -- CLICK EVENT - FIXED
+        optBtn.MouseButton1Click:Connect(function()
+            print("Option clicked:", opt) -- DEBUG
+            
+            -- Update current option
             currentOption = opt
+            
+            -- Update main button text
             btn.Text = text .. ": " .. opt
+            
+            -- Update visual highlighting
+            for optionName, button in pairs(optionButtons) do
+                if optionName == opt then
+                    -- Highlight selected option
+                    button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+                    button.TextColor3 = colors.accent
+                else
+                    -- Reset other options
+                    button.BackgroundTransparency = 1
+                    button.TextColor3 = Color3.fromRGB(220, 220, 220)
+                end
+            end
+            
+            -- Close dropdown
             listFrame.Visible = false
-            listFrame.Parent = nil
+            
+            -- Call callback
             if callback then 
                 callback(opt) 
             end
-        end))
+        end)
     end
     
     -- Update list frame size
     listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+        listFrame.Size = UDim2.new(1, 0, 0, math.min(listLayout.AbsoluteContentSize.Y, 140))
     end)
     
-    table.insert(elementConnections, btn.MouseButton1Click:Connect(function()
-        if listFrame.Visible then
-            listFrame.Visible = false
-            listFrame.Parent = nil
-        else
-            -- Position and parent the list frame
-            listFrame.Position = UDim2.new(0, frame.AbsolutePosition.X, 0, frame.AbsolutePosition.Y + frame.AbsoluteSize.Y)
-            listFrame.Parent = self.gui
-            listFrame.Visible = true
-            
-            local maxHeight = math.min(#options * 28, 140)
-            listFrame.Size = UDim2.new(0, frame.AbsoluteSize.X, 0, maxHeight)
-        end
-    end))
+    -- Main dropdown toggle
+    btn.MouseButton1Click:Connect(function()
+        listFrame.Visible = not listFrame.Visible
+    end)
     
-    -- Close dropdown when clicking outside
-    local function closeDropdown(input)
+    -- Close when clicking outside
+    local closeConnection
+    closeConnection = UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
             if not frame:IsAncestorOf(input.Parent) and not listFrame:IsAncestorOf(input.Parent) then
                 listFrame.Visible = false
-                listFrame.Parent = nil
             end
         end
-    end
+    end)
     
-    local closeConnection = UserInputService.InputBegan:Connect(closeDropdown)
     table.insert(self.connections, closeConnection)
-    table.insert(elementConnections, closeConnection)
     
     self.elements[elementId] = {
         SetOption = function(option)
             if table.find(options, option) then
                 currentOption = option
                 btn.Text = text .. ": " .. option
+                
+                -- Update visual highlighting
+                for opt, button in pairs(optionButtons) do
+                    if opt == option then
+                        button.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+                        button.TextColor3 = colors.accent
+                    else
+                        button.BackgroundTransparency = 1
+                        button.TextColor3 = Color3.fromRGB(220, 220, 220)
+                    end
+                end
             end
         end,
         GetOption = function()
             return currentOption
         end,
         Destroy = function()
-            for _, conn in ipairs(elementConnections) do
-                if conn.Connected then
-                    conn:Disconnect()
-                end
-            end
-            if listFrame then
-                listFrame:Destroy()
-            end
             frame:Destroy()
             self.elements[elementId] = nil
         end
     }
-    
-    self.elementConnections[elementId] = elementConnections
     
     return self.elements[elementId]
 end
