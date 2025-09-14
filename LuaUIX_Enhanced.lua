@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- RELIABLE DROPDOWN IMPLEMENTATION - SIMPLIFIED
+-- FIXED DROPDOWN WITH PROPER PROGRAMMATIC CONTROL
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     
@@ -703,7 +703,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     -- Store state in self.elements
     self.elements[elementId] = {
         currentOption = defaultValue,
-        btn = btn,
+        btn = btn,  -- Store the actual TextButton, not the wrapper object
         text = text,
         options = options,
         callback = callback
@@ -711,16 +711,11 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     
     local element = self.elements[elementId]
     
-    -- DEBUG: Print when dropdown is created
-    print("Dropdown created with default:", defaultValue)
-    
-    -- Main dropdown toggle - SIMPLIFIED: Just cycle through options
+    -- Main dropdown toggle - Cycle through options on click
     btn.MouseButton1Click:Connect(function()
         local currentIndex = table.find(options, element.currentOption) or 1
         local nextIndex = (currentIndex % #options) + 1
         local newOption = options[nextIndex]
-        
-        print("Dropdown clicked! Changing from", element.currentOption, "to", newOption)
         
         element.currentOption = newOption
         element.btn.Text = element.text .. ": " .. newOption
@@ -736,7 +731,7 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             if table.find(options, option) then
                 print("SetOption called with:", option)
                 element.currentOption = option
-                element.btn.Text = element.text .. ": " .. option
+                element.btn.Text = element.text .. ": " .. option  -- Directly set Text property
                 
                 if element.callback then
                     element.callback(option)
@@ -745,7 +740,6 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         end,
         
         GetOption = function()
-            print("GetOption returning:", element.currentOption)
             return element.currentOption
         end,
         
