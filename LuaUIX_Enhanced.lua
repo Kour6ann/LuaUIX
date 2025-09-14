@@ -1262,7 +1262,7 @@ function LuaUIX:AddTooltip(element, text)
     return tooltip
 end
 
--- Notification system with proper padding
+-- Fixed Notification System
 function LuaUIX:Notify(title, message, duration, notifType)
     duration = duration or 5
     notifType = notifType or "info"
@@ -1271,8 +1271,8 @@ function LuaUIX:Notify(title, message, duration, notifType)
     if not self.notificationContainer then
         self.notificationContainer = Create("Frame", {
             Name = "NotificationContainer",
-            Size = UDim2.new(0, 340, 1, 0),
-            Position = UDim2.new(1, -360, 0, 0),
+            Size = UDim2.new(0, 340, 0, 0),
+            Position = UDim2.new(1, -360, 0, 20), -- Fixed position
             BackgroundTransparency = 1,
             Parent = self.gui
         })
@@ -1281,12 +1281,12 @@ function LuaUIX:Notify(title, message, duration, notifType)
             SortOrder = Enum.SortOrder.LayoutOrder,
             Padding = UDim.new(0, 12),
             HorizontalAlignment = Enum.HorizontalAlignment.Right,
-            VerticalAlignment = Enum.VerticalAlignment.Bottom,
+            VerticalAlignment = Enum.VerticalAlignment.Top, -- Changed to Top
             Parent = self.notificationContainer
         })
         
         Create("UIPadding", {
-            PaddingBottom = UDim.new(0, 25),
+            PaddingTop = UDim.new(0, 25),
             PaddingRight = UDim.new(0, 25),
             Parent = self.notificationContainer
         })
@@ -1303,7 +1303,7 @@ function LuaUIX:Notify(title, message, duration, notifType)
     
     Create("UICorner", {CornerRadius = UDim.new(0, 10), Parent = notification})
     
-    -- PROPER PADDING: 12px top/bottom, 15px left/right
+    -- PROPER PADDING
     Create("UIPadding", {
         PaddingTop = UDim.new(0, 12),
         PaddingLeft = UDim.new(0, 15),
@@ -1312,7 +1312,7 @@ function LuaUIX:Notify(title, message, duration, notifType)
         Parent = notification
     })
     
-    -- Title with proper spacing
+    -- Title
     local titleLabel = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 22),
         BackgroundTransparency = 1,
@@ -1324,10 +1324,10 @@ function LuaUIX:Notify(title, message, duration, notifType)
         Parent = notification
     })
     
-    -- Message with proper spacing from title
+    -- Message
     local messageLabel = Create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.new(0, 0, 0, 27), -- Space below title
+        Position = UDim2.new(0, 0, 0, 27),
         BackgroundTransparency = 1,
         Text = message,
         Font = Enum.Font.Gotham,
@@ -1339,8 +1339,8 @@ function LuaUIX:Notify(title, message, duration, notifType)
         Parent = notification
     })
     
-    -- Set size based on content with proper padding
-    notification.Size = UDim2.new(0, 320, 0, messageLabel.TextBounds.Y + 45) -- 12+12+21 padding
+    -- Set size based on content
+    notification.Size = UDim2.new(0, 320, 0, messageLabel.TextBounds.Y + 45)
     
     -- Set color based on notification type
     local color = colors.info
@@ -1348,7 +1348,7 @@ function LuaUIX:Notify(title, message, duration, notifType)
     elseif notifType == "warning" then color = colors.warning
     elseif notifType == "error" then color = colors.error end
     
-    -- Accent bar with proper positioning
+    -- Accent bar
     local accentBar = Create("Frame", {
         Size = UDim2.new(0, 6, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
@@ -1362,10 +1362,13 @@ function LuaUIX:Notify(title, message, duration, notifType)
     })
     
     -- Adjust text position to account for accent bar
-    titleLabel.Position = UDim2.new(0, 10, 0, 0) -- Move right to avoid accent bar
+    titleLabel.Position = UDim2.new(0, 10, 0, 0)
     titleLabel.Size = UDim2.new(1, -10, 0, 22)
     messageLabel.Position = UDim2.new(0, 10, 0, 27)
     messageLabel.Size = UDim2.new(1, -10, 0, 0)
+    
+    -- Make sure notification is visible
+    notification.Visible = true
     
     -- Animate in from the right
     notification.Position = UDim2.new(1, 0, 0, 0)
@@ -1380,13 +1383,14 @@ function LuaUIX:Notify(title, message, duration, notifType)
                 BackgroundTransparency = 1
             })
             
-            -- Wait for animation to complete
             wait(0.3)
             if notification and notification.Parent then
                 notification:Destroy()
             end
         end
     end)
+    
+    print("Notification created:", title, "-", message) -- Debug print
     
     return notification
 end
