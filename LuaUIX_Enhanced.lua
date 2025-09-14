@@ -671,7 +671,7 @@ function LuaUIX:CreateSlider(parent, text, min, max, callback, defaultValue, pre
     return self.elements[elementId]
 end
 
--- DROPDOWN IMPLEMENTATION INSPIRED BY YOUR EXAMPLE
+-- COMPLETELY FIXED DROPDOWN IMPLEMENTATION
 function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     local elementId = "dropdown_" .. HttpService:GenerateGUID(false)
     
@@ -775,16 +775,18 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         text = text,
         options = options,
         callback = callback,
-        isOpen = false
+        isOpen = false,
+        optionFrames = {} -- Store option frames for highlighting
     }
     
     self.elements[elementId] = state
     
     -- Create option buttons
-    for _, option in ipairs(options) do
+    for i, option in ipairs(options) do
         local optionFrame = Create("Frame", {
             Name = option,
-            Size = UDim2.new(1, 0, 0, 30),
+            Size = UDim2.new(1, -10, 0, 30),
+            Position = UDim2.new(0, 5, 0, (i-1) * 30),
             BackgroundColor3 = option == defaultValue and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(30, 30, 30),
             BackgroundTransparency = 0,
             Parent = listFrame
@@ -819,19 +821,20 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
             Parent = optionFrame
         })
         
+        -- Store option frame reference
+        state.optionFrames[option] = optionFrame
+        
         optionInteract.MouseButton1Click:Connect(function()
             if state.currentOption ~= option then
                 state.currentOption = option
                 state.selected.Text = option
                 
-                -- Update visual highlighting
-                for _, optFrame in ipairs(listFrame:GetChildren()) do
-                    if optFrame:IsA("Frame") and optFrame.Name ~= "Placeholder" then
-                        if optFrame.Name == option then
-                            optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                        else
-                            optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-                        end
+                -- Update visual highlighting for ALL options
+                for opt, optFrame in pairs(state.optionFrames) do
+                    if opt == option then
+                        optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                    else
+                        optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
                     end
                 end
                 
@@ -849,6 +852,11 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         end)
     end
     
+    -- Update list frame size based on content
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+    
     -- Toggle dropdown
     interact.MouseButton1Click:Connect(function()
         state.isOpen = not state.isOpen
@@ -856,9 +864,10 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
         if state.isOpen then
             -- Open dropdown
             state.listFrame.Visible = true
-            state.listFrame.Size = UDim2.new(1, 0, 0, math.min(#options * 30, 150))
+            local maxHeight = math.min(#options * 30, 150)
+            state.listFrame.Size = UDim2.new(1, 0, 0, maxHeight)
             state.toggle.Text = "▲"
-            state.frame.Size = UDim2.new(1, 0, 0, 45 + math.min(#options * 30, 150))
+            state.frame.Size = UDim2.new(1, 0, 0, 45 + maxHeight)
         else
             -- Close dropdown
             state.listFrame.Visible = false
@@ -885,17 +894,16 @@ function LuaUIX:CreateDropdown(parent, text, options, callback, defaultValue)
     return {
         SetOption = function(option)
             if table.find(options, option) then
+                print("SetOption called with:", option)
                 state.currentOption = option
                 state.selected.Text = option
                 
-                -- Update visual highlighting
-                for _, optFrame in ipairs(listFrame:GetChildren()) do
-                    if optFrame:IsA("Frame") and optFrame.Name ~= "Placeholder" then
-                        if optFrame.Name == option then
-                            optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                        else
-                            optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-                        end
+                -- Update visual highlighting for ALL options
+                for opt, optFrame in pairs(state.optionFrames) do
+                    if opt == option then
+                        optFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                    else
+                        optFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
                     end
                 end
                 
