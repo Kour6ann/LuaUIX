@@ -1120,7 +1120,7 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     return self.elements[elementId]
 end
 
--- SIMPLIFIED Color Picker Dialog (if the enhanced one still has issues)
+-- SIMPLIFIED Color Picker Dialog (No tooltips)
 function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     local dialog = Create("Frame", {
         Name = "ColorPickerDialog",
@@ -1133,7 +1133,7 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     
     Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = dialog})
     
-    local colors = {
+    local colorList = {
         Color3.fromRGB(255, 0, 0),    -- Red
         Color3.fromRGB(0, 255, 0),    -- Green
         Color3.fromRGB(0, 0, 255),    -- Blue
@@ -1146,7 +1146,7 @@ function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
         Color3.fromRGB(0, 0, 0),      -- Black
     }
     
-    for i, color in ipairs(colors) do
+    for i, color in ipairs(colorList) do
         local btn = Create("TextButton", {
             Size = UDim2.new(0, 30, 0, 30),
             Position = UDim2.new(0, 15 + ((i-1) % 5) * 45, 0, 30 + math.floor((i-1)/5) * 40),
