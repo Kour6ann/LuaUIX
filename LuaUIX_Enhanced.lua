@@ -1457,38 +1457,19 @@ function LuaUIX:ToggleVisibility()
     self.gui.Enabled = not self.gui.Enabled
 end
 
--- Destroy UI (add tooltip cleanup)
+-- Destroy UI (with safe connection cleanup)
 function LuaUIX:Destroy()
-    -- Disconnect all connections
+    -- Disconnect all connections safely
     for _, connection in ipairs(self.connections) do
-        if connection.Connected then
-            connection:Disconnect()
-        end
-    end
-    
-    -- Destroy all tooltips and their connections
-    if self.tooltipConnections then
-        for element, connections in pairs(self.tooltipConnections) do
-            for _, conn in ipairs(connections) do
-                if conn.Connected then
-                    conn:Disconnect()
-                end
-            end
-        end
-    end
-    
-    if self.tooltips then
-        for _, tooltip in pairs(self.tooltips) do
-            if tooltip and tooltip.Parent then
-                tooltip:Destroy()
-            end
+        if connection and typeof(connection) == "RBXScriptConnection" and connection.Connected then
+            pcall(function() connection:Disconnect() end)
         end
     end
     
     -- Destroy all elements and their connections
     for elementId, element in pairs(self.elements) do
-        if element.Destroy then
-            element:Destroy()
+        if element and element.Destroy then
+            pcall(function() element:Destroy() end)
         end
     end
     
