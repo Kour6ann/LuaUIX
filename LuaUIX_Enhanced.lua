@@ -1120,102 +1120,63 @@ function LuaUIX:CreateColorPicker(parent, text, defaultColor, callback)
     return self.elements[elementId]
 end
 
--- Enhanced Color Picker Dialog - FIXED VERSION
+-- SIMPLIFIED Color Picker Dialog (if the enhanced one still has issues)
 function LuaUIX:CreateColorPickerDialog(defaultColor, callback)
     local dialog = Create("Frame", {
         Name = "ColorPickerDialog",
-        Size = UDim2.new(0, 300, 0, 250),
-        Position = UDim2.new(0.5, -150, 0.5, -125),
+        Size = UDim2.new(0, 250, 0, 200),
+        Position = UDim2.new(0.5, -125, 0.5, -100),
         BackgroundColor3 = colors.section,
         ZIndex = 20,
         Parent = self.gui
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = dialog})
+    Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = dialog})
     
-    -- Add padding to dialog
-    Create("UIPadding", {
-        PaddingTop = UDim.new(0, 15),
-        PaddingLeft = UDim.new(0, 15),
-        PaddingRight = UDim.new(0, 15),
-        PaddingBottom = UDim.new(0, 15),
-        Parent = dialog
-    })
-    
-    local title = Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 20),
-        BackgroundTransparency = 1,
-        Text = "Color Picker",
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        TextColor3 = colors.text,
-        Parent = dialog
-    })
-    
-    -- Simple HSV color grid (simplified but functional)
-    local colorButtons = {
-        {Color3.fromRGB(255, 0, 0), "Red"},
-        {Color3.fromRGB(0, 255, 0), "Green"},
-        {Color3.fromRGB(0, 0, 255), "Blue"},
-        {Color3.fromRGB(255, 255, 0), "Yellow"},
-        {Color3.fromRGB(255, 0, 255), "Magenta"},
-        {Color3.fromRGB(0, 255, 255), "Cyan"},
-        {Color3.fromRGB(255, 165, 0), "Orange"},
-        {Color3.fromRGB(128, 0, 128), "Purple"},
-        {Color3.fromRGB(255, 255, 255), "White"},
-        {Color3.fromRGB(0, 0, 0), "Black"},
-        {Color3.fromRGB(128, 128, 128), "Gray"},
-        {Color3.fromRGB(165, 42, 42), "Brown"}
+    local colors = {
+        Color3.fromRGB(255, 0, 0),    -- Red
+        Color3.fromRGB(0, 255, 0),    -- Green
+        Color3.fromRGB(0, 0, 255),    -- Blue
+        Color3.fromRGB(255, 255, 0),  -- Yellow
+        Color3.fromRGB(255, 0, 255),  -- Magenta
+        Color3.fromRGB(0, 255, 255),  -- Cyan
+        Color3.fromRGB(255, 165, 0),  -- Orange
+        Color3.fromRGB(128, 0, 128),  -- Purple
+        Color3.fromRGB(255, 255, 255),-- White
+        Color3.fromRGB(0, 0, 0),      -- Black
     }
     
-    for i, colorData in ipairs(colorButtons) do
-        local colorBtn = Create("TextButton", {
-            Size = UDim2.new(0, 40, 0, 40),
-            Position = UDim2.new(0, 20 + ((i-1) % 4) * 70, 0, 40 + math.floor((i-1)/4) * 70),
-            BackgroundColor3 = colorData[1],
+    for i, color in ipairs(colors) do
+        local btn = Create("TextButton", {
+            Size = UDim2.new(0, 30, 0, 30),
+            Position = UDim2.new(0, 15 + ((i-1) % 5) * 45, 0, 30 + math.floor((i-1)/5) * 40),
+            BackgroundColor3 = color,
             Text = "",
             Parent = dialog
         })
         
-        Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = colorBtn})
+        Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = btn})
         
-        -- Add tooltip
-        self:AddTooltip(colorBtn, colorData[2])
-        
-        colorBtn.MouseButton1Click:Connect(function()
+        btn.MouseButton1Click:Connect(function()
             dialog:Destroy()
-            if callback then
-                callback(colorData[1])
-            end
+            if callback then callback(color) end
         end)
     end
     
-    local closeButton = Create("TextButton", {
-        Size = UDim2.new(0, 80, 0, 30),
-        Position = UDim2.new(0.5, -40, 1, -40),
+    local closeBtn = Create("TextButton", {
+        Size = UDim2.new(0, 80, 0, 25),
+        Position = UDim2.new(0.5, -40, 1, -35),
         BackgroundColor3 = colors.accent,
-        Text = "Cancel",
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
+        Text = "Close",
         TextColor3 = colors.text,
         Parent = dialog
     })
     
-    Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = closeButton})
+    Create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = closeBtn})
     
-    -- Add consistent padding to dialog buttons
-    Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        Parent = closeButton
-    })
-    
-    closeButton.MouseButton1Click:Connect(function()
+    closeBtn.MouseButton1Click:Connect(function()
         dialog:Destroy()
     end)
-    
-    -- Make dialog draggable
-    self:draggable(dialog)
     
     return dialog
 end
